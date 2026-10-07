@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Battle Sample</title>
+<style>
+  :root {
+    --bg: #0a0d0a;
+    --panel: #10140f;
+    --line: #1f2b1c;
+    --line-hover: #3f6b3a;
+    --text: #c8e6c0;
+    --text-dim: #5f7a58;
+    --text-faint: #3a4a36;
+    --accent: #5ee08a;
+    --danger: #e0665e;
+    --warn: #e0c65e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', ui-monospace, monospace;
+  }
+  body {
+    padding: 14px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .note {
+    max-width: 900px;
+    margin: 0 auto 10px;
+    font-size: 10px;
+    color: var(--text-faint);
+    text-align: center;
+  }
+  .board {
+    max-width: 900px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 12px;
+  }
+  .label {
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    color: var(--text-dim);
+    margin: 0 0 8px;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 1px 0;
+  }
+  .stat-row span:first-child { color: var(--text-dim); }
+  .stat-row .hidden-val { color: var(--text-faint); }
+  .bar {
+    height: 4px;
+    background: var(--line);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 2px 0 4px;
+  }
+  .bar > div { height: 100%; background: var(--accent); }
+  .bar.shield > div { background: var(--warn); }
+  .bar.armor > div { background: #8fb0e8; }
+
+  .log {
+    max-width: 900px;
+    margin: 8px auto;
+    height: 130px;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.6;
+  }
+  .log p { margin: 0; color: var(--text-dim); }
+  .log p.you { color: var(--text); }
+  .log p.warn { color: var(--warn); }
+  .log p.bad { color: var(--danger); }
+  .log p.good { color: var(--accent); }
+  .log p.lore { color: var(--text-faint); font-style: italic; }
+
+  .actions {
+    max-width: 900px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  button {
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 4px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button.disconnect:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+  button:disabled { color: var(--text-faint); border-color: var(--line); cursor: not-allowed; opacity: 0.5; }
+
+  .submenu {
+    max-width: 900px;
+    margin: 8px auto 0;
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .submenu.visible { display: flex; }
+  .submenu button { text-align: left; padding: 8px 10px; }
+  .submenu .opt-meta { color: var(--text-faint); font-size: 10px; }
+
+  .gameover {
+    max-width: 900px;
+    margin: 10px auto 0;
+    text-align: center;
+    font-size: 13px;
+    padding: 10px;
+    display: none;
+  }
+  .gameover.visible { display: block; }
+  .gameover.win { color: var(--accent); }
+  .gameover.lose { color: var(--danger); }
+
+  @media (max-width: 600px) {
+    .board { grid-template-columns: 1fr; }
+    .actions { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<p class="note">sample balance values — not final numbers. range is omitted from this slice.</p>
+
+<div class="board">
+  <div class="panel" id="playerPanel">
+    <p class="label">operator</p>
+  </div>
+  <div class="panel" id="enemyPanel">
+    <p class="label">enemy</p>
+  </div>
+</div>
+
+<div class="panel log" id="log"></div>
+
+<div class="actions">
+  <button id="btnAttack">attack</button>
+  <button id="btnScan">scan</button>
+  <button id="btnEw">ew</button>
+  <button class="disconnect" id="btnDisconnect">disconnect</button>
+</div>
+
+<div class="submenu" id="submenu"></div>
+
+<div class="gameover" id="gameover"></div>
+
+<script>
+  const WEAPONS = {
+    plasma:   { name: 'Plasma',   dmg: 40, drain: 30, cooldown: 3, canShield: true,  canArmor: true  },
+    laser:    { name: 'Laser',    dmg: 25, drain: 15, cooldown: 1, canShield: false, canArmor: true  },
+    missiles: { name: 'Missiles', dmg: 15, drain: 5,  cooldown: 0, canShield: false, canArmor: false }
+  };
+
+  const state = {
+    turnLocked: false,
+    gameOver: false,
+    player: {
+      hp: 200, hpMax: 200,
+      armor: 80, armorMax: 80,
+      shield: 60, shieldMax: 60,
+      power: 100, powerMax: 100,
+      connection: 'strong',
+      firewallTier: 2,
+      processingTier: 1, // doubles as EW tier
+      scanTier: 1,
+      cd: { plasma: 0, laser: 0, missiles: 0, scan: 0, jam: 0, breach: 0, emp: 0, drain: 0, corrupt: 0 }
+    },
+    enemy: {
+      hp: 220, hpMax: 220,
+      armor: 70, armorMax: 70,
+      shield: 50, shieldMax: 50,
+      power: 70, powerMax: 70,
+      connection: 'moderate',
+      firewallTier: 1,
+      processingTier: 1,
+      cd: { plasma: 0, laser: 0, missiles: 0 },
+      breached: false,
+      breachTurnsLeft: 0,
+      skipNextTurn: false,
+      revealed: { connection: false, hp: false, armor: false, shield: false, power: false, processing: false, firewall: false }
+    }
+  };
+
+  const logEl = document.getElementById('log');
+  function log(text, cls) {
+    const p = document.createElement('p');
+    if (cls) p.className = cls;
+    p.textContent = '> ' + text;
+    logEl.appendChild(p);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function pct(v, max) { return Math.max(0, Math.min(100, (v / max) * 100)); }
+
+  function renderPlayer() {
+    const p = state.player;
+    const el = document.getElementById('playerPanel');
+    el.innerHTML = `
+      <p class="label">operator</p>
+      <div class="stat-row"><span>hp</span><span>${p.hp}/${p.hpMax}</span></div>
+      <div class="bar"><div style="width:${pct(p.hp,p.hpMax)}%"></div></div>
+      <div class="stat-row"><span>armor</span><span>${p.armor}/${p.armorMax}</span></div>
+      <div class="bar armor"><div style="width:${pct(p.armor,p.armorMax)}%"></div></div>
+      <div class="stat-row"><span>shield</span><span>${p.shield}/${p.shieldMax}</span></div>
+      <div class="bar shield"><div style="width:${pct(p.shield,p.shieldMax)}%"></div></div>
+      <div class="stat-row"><span>power</span><span>${p.power}/${p.powerMax}</span></div>
+      <div class="stat-row"><span>connection</span><span>${p.connection}</span></div>
+      <div class="stat-row"><span>firewall</span><span>t${p.firewallTier}</span></div>
+      <div class="stat-row"><span>processing</span><span>t${p.processingTier}</span></div>
+      <div class="stat-row"><span>scan</span><span>t${p.scanTier}</span></div>
+    `;
+  }
+
+  function renderEnemy() {
+    const e = state.enemy;
+    const r = e.revealed;
+    const val = (flag, v) => flag ? v : '<span class="hidden-val">???</span>';
+    const el = document.getElementById('enemyPanel');
+    let breachLine = e.breached ? `<div class="stat-row"><span>firewall status</span><span style="color:var(--warn)">breached (${e.breachTurnsLeft})</span></div>` : '';
+    el.innerHTML = `
+      <p class="label">enemy</p>
+      <div class="stat-row"><span>hp</span><span>${val(r.hp, e.hp + '/' + e.hpMax)}</span></div>
+      ${r.hp ? `<div class="bar"><div style="width:${pct(e.hp,e.hpMax)}%"></div></div>` : ''}
+      <div class="stat-row"><span>armor</span><span>${val(r.armor, e.armor + '/' + e.armorMax)}</span></div>
+      ${r.armor ? `<div class="bar armor"><div style="width:${pct(e.armor,e.armorMax)}%"></div></div>` : ''}
+      <div class="stat-row"><span>shield</span><span>${val(r.shield, e.shield + '/' + e.shieldMax)}</span></div>
+      ${r.shield ? `<div class="bar shield"><div style="width:${pct(e.shield,e.shieldMax)}%"></div></div>` : ''}
+      <div class="stat-row"><span>power</span><span>${val(r.power, e.power + '/' + e.powerMax)}</span></div>
+      <div class="stat-row"><span>connection</span><span>${val(r.connection, e.connection)}</span></div>
+      <div class="stat-row"><span>firewall</span><span>${val(r.firewall, 't' + e.firewallTier)}</span></div>
+      <div class="stat-row"><span>processing</span><span>${val(r.processing, 't' + e.processingTier)}</span></div>
+      ${breachLine}
+    `;
+  }
+
+  function renderAll() { renderPlayer(); renderEnemy(); updateButtons(); }
+
+  function updateButtons() {
+    const locked = state.turnLocked || state.gameOver;
+    document.getElementById('btnAttack').disabled = locked;
+    document.getElementById('btnScan').disabled = locked;
+    document.getElementById('btnEw').disabled = locked;
+    document.getElementById('btnDisconnect').disabled = state.gameOver;
+  }
+
+  function clearSubmenu() {
+    const sm = document.getElementById('submenu');
+    sm.classList.remove('visible');
+    sm.innerHTML = '';
+  }
+
+  function makeOption(labelHtml, metaText, enabled, onClick) {
+    const b = document.createElement('button');
+    b.innerHTML = labelHtml + (metaText ? `<div class="opt-meta">${metaText}</div>` : '');
+    b.disabled = !enabled;
+    if (enabled) b.addEventListener('click', onClick);
+    return b;
+  }
+
+  // ---- resolution helpers ----
+  function resolveWeaponHit(attackerLabel, weaponKey, target, targetLabel) {
+    const w = WEAPONS[weaponKey];
+    if (target.shield > 0) {
+      if (w.canShield) {
+        const dmg = Math.min(target.shield, w.dmg);
+        target.shield -= dmg;
+        log(`${attackerLabel} fired ${w.name} — ${targetLabel} shield down ${dmg} (${target.shield} left)`, 'good');
+      } else {
+        log(`${attackerLabel} fired ${w.name} — blocked by ${targetLabel} shield`, 'bad');
+      }
+    } else if (target.armor > 0) {
+      if (w.canArmor) {
+        const dmg = Math.min(target.armor, w.dmg);
+        target.armor -= dmg;
+        log(`${attackerLabel} fired ${w.name} — ${targetLabel} armor down ${dmg} (${target.armor} left)`, 'good');
+      } else {
+        log(`${attackerLabel} fired ${w.name} — blocked, ${targetLabel} armor unaffected`, 'bad');
+      }
+    } else {
+      const dmg = Math.min(target.hp, w.dmg);
+      target.hp -= dmg;
+      log(`${attackerLabel} fired ${w.name} — ${targetLabel} HP down ${dmg} (${target.hp} left)`, 'good');
+    }
+  }
+
+  function checkGameOver() {
+    if (state.enemy.hp <= 0) {
+      endGame(true, 'ENEMY NEUTRALIZED — HACK SUCCESSFUL');
+      return true;
+    }
+    if (state.player.hp <= 0) {
+      endGame(false, 'CONNECTION TERMINATED — HACK FAILED');
+      return true;
+    }
+    return false;
+  }
+
+  function endGame(win, message) {
+    state.gameOver = true;
+    const go = document.getElementById('gameover');
+    go.textContent = message;
+    go.className = 'gameover visible ' + (win ? 'win' : 'lose');
+    log(message, win ? 'good' : 'bad');
+    updateButtons();
+  }
+
+  // ---- player actions ----
+  function openAttackMenu() {
+    clearSubmenu();
+    const sm = document.getElementById('submenu');
+    sm.classList.add('visible');
+    Object.keys(WEAPONS).forEach(key => {
+      const w = WEAPONS[key];
+      const cdReady = state.player.cd[key] === 0;
+      const canAfford = state.player.power >= w.drain;
+      const enabled = cdReady && canAfford;
+      let meta = `dmg ${w.dmg} · drain ${w.drain} · cooldown ${w.cooldown}`;
+      if (!cdReady) meta += ` · on cooldown (${state.player.cd[key]})`;
+      if (!canAfford) meta += ' · insufficient power';
+      sm.appendChild(makeOption(w.name.toLowerCase(), meta, enabled, () => {
+        state.player.power -= w.drain;
+        state.player.cd[key] = w.cooldown;
+        resolveWeaponHit('operator', key, state.enemy, 'enemy');
+        clearSubmenu();
+        endPlayerAction();
+      }));
+    });
+  }
+
+  function openScanMenu() {
+    clearSubmenu();
+    const sm = document.getElementById('submenu');
+    sm.classList.add('visible');
+    const cdReady = state.player.cd.scan === 0;
+    const cost = 10;
+    const canAfford = state.player.power >= cost;
+    const enabled = cdReady && canAfford;
+    let meta = `power ${cost} · cooldown 2`;
+    if (!cdReady) meta += ` · on cooldown (${state.player.cd.scan})`;
+    if (!canAfford) meta += ' · insufficient power';
+    sm.appendChild(makeOption(`run scan (tier ${state.player.scanTier})`, meta, enabled, () => {
+      state.player.power -= cost;
+      state.player.cd.scan = 2;
+      const e = state.enemy;
+      const baseline = state.player.scanTier >= e.firewallTier;
+      if (baseline) {
+        e.revealed.connection = true;
+        e.revealed.hp = true;
+        e.revealed.armor = true;
+        e.revealed.shield = true;
+        log('scan complete — connection, hp, armor, shield revealed', 'good');
+      } else {
+        log('scan complete — firewall held most of it back', 'warn');
+      }
+      if (state.player.scanTier >= e.firewallTier + 1) {
+        e.revealed.power = true;
+        e.revealed.processing = true;
+        log('scan tier exceeds firewall — power and processing also revealed', 'good');
+      }
+      if (e.breached) {
+        e.revealed.connection = e.revealed.hp = e.revealed.armor = e.revealed.shield = e.revealed.power = e.revealed.processing = true;
+        log('firewall breached — full telemetry visible', 'good');
+      }
+      clearSubmenu();
+      endPlayerAction();
+    }));
+  }
+
+  function openEwMenu() {
+    clearSubmenu();
+    const sm = document.getElementById('submenu');
+    sm.classList.add('visible');
+    const p = state.player, e = state.enemy;
+
+    // Wave 1
+    const jamReady = p.cd.jam === 0;
+    const jamAfford = p.power >= 15;
+    sm.appendChild(makeOption('jam connection', `power 15 · cooldown 2 · needs EW tier ${p.processingTier} ≥ firewall`, jamReady && jamAfford, () => {
+      p.power -= 15; p.cd.jam = 2;
+      const success = p.processingTier >= e.firewallTier;
+      if (success) { log('jam successful — enemy connection degraded', 'good'); }
+      else { log('jam failed — firewall held', 'bad'); }
+      clearSubmenu(); endPlayerAction();
+    }));
+
+    const breachReady = p.cd.breach === 0;
+    const breachAfford = p.power >= 20;
+    sm.appendChild(makeOption('breach firewall', `power 20 · cooldown 3 · needs EW tier ${p.processingTier} ≥ firewall`, breachReady && breachAfford, () => {
+      p.power -= 20; p.cd.breach = 3;
+      e.revealed.firewall = true;
+      const success = p.processingTier >= e.firewallTier;
+      if (success) {
+        e.breached = true;
+        e.breachTurnsLeft = 3;
+        log('firewall breach successful — wave 2 options unlocked', 'good');
+      } else {
+        log('breach attempt failed — firewall too strong', 'bad');
+      }
+      clearSubmenu(); endPlayerAction();
+    }));
+
+    // Wave 2 — only if breached
+    if (e.breached) {
+      const empReady = p.cd.emp === 0;
+      const empAfford = p.power >= 25;
+      sm.appendChild(makeOption('emp', `power 25 · cooldown 2 · targets shield, cascades if shield is already down`, empReady && empAfford, () => {
+        p.power -= 25; p.cd.emp = 2;
+        if (e.shield > 0) {
+          const dmg = Math.min(e.shield, 30);
+          e.shield -= dmg;
+          log(`emp discharged — enemy shield down ${dmg} (${e.shield} left)`, 'good');
+        } else {
+          e.power = 0;
+          e.breachTurnsLeft += 2;
+          log('emp cascade — shield already down, enemy power knocked out and breach window extended', 'good');
+        }
+        clearSubmenu(); endPlayerAction();
+      }));
+
+      const drainReady = p.cd.drain === 0;
+      const drainAfford = p.power >= 20;
+      sm.appendChild(makeOption('power drain', `power 20 · cooldown 2 · drains enemy power pool`, drainReady && drainAfford, () => {
+        p.power -= 20; p.cd.drain = 2;
+        const dmg = Math.min(e.power, 40);
+        e.power -= dmg;
+        log(`power drain — enemy power down ${dmg} (${e.power} left)`, 'good');
+        clearSubmenu(); endPlayerAction();
+      }));
+
+      const corruptReady = p.cd.corrupt === 0;
+      const corruptAfford = p.power >= 20;
+      sm.appendChild(makeOption('corruption', `power 20 · cooldown 3 · disrupts enemy's next action`, corruptReady && corruptAfford, () => {
+        p.power -= 20; p.cd.corrupt = 3;
+        e.skipNextTurn = true;
+        log('corruption injected — enemy process destabilized', 'good');
+        clearSubmenu(); endPlayerAction();
+      }));
+    }
+
+    sm.classList.add('visible');
+  }
+
+  document.getElementById('btnAttack').addEventListener('click', openAttackMenu);
+  document.getElementById('btnScan').addEventListener('click', openScanMenu);
+  document.getElementById('btnEw').addEventListener('click', openEwMenu);
+  document.getElementById('btnDisconnect').addEventListener('click', () => {
+    if (state.gameOver) return;
+    endGame(false, 'OPERATOR DISCONNECTED — RETREATED');
+  });
+
+  function endPlayerAction() {
+    renderAll();
+    if (checkGameOver()) return;
+    state.turnLocked = true;
+    updateButtons();
+    setTimeout(enemyTurn, 500);
+  }
+
+  // ---- enemy AI ----
+  function enemyTurn() {
+    const e = state.enemy, p = state.player;
+
+    if (e.skipNextTurn) {
+      e.skipNextTurn = false;
+      log('enemy process still recovering — no action taken', 'warn');
+      tickEnd();
+      return;
+    }
+
+    if (e.breached) {
+      e.breachTurnsLeft -= 1;
+      const tryRestore = e.breachTurnsLeft <= 0 || Math.random() < 0.3;
+      if (tryRestore) {
+        e.breached = false;
+        e.breachTurnsLeft = 0;
+        log('enemy firewall back online', 'warn');
+        tickEnd();
+        return;
+      }
+    }
+
+    // pick a usable weapon: prefer one that can currently touch the player's exposed layer
+    const targetLayer = p.shield > 0 ? 'shield' : (p.armor > 0 ? 'armor' : 'hp');
+    const order = targetLayer === 'shield' ? ['plasma', 'laser', 'missiles']
+                : targetLayer === 'armor'  ? ['laser', 'plasma', 'missiles']
+                : ['missiles', 'laser', 'plasma'];
+
+    let chosen = null;
+    for (const key of order) {
+      const w = WEAPONS[key];
+      if (e.cd[key] === 0 && e.power >= w.drain) { chosen = key; break; }
+    }
+
+    if (chosen) {
+      const w = WEAPONS[chosen];
+      e.power -= w.drain;
+      e.cd[chosen] = w.cooldown;
+      resolveWeaponHit('enemy', chosen, p, 'operator');
+    } else {
+      log('enemy holds — insufficient resources to act', 'warn');
+    }
+
+    tickEnd();
+  }
+
+  function tickEnd() {
+    const p = state.player, e = state.enemy;
+    Object.keys(p.cd).forEach(k => { if (p.cd[k] > 0) p.cd[k] -= 1; });
+    Object.keys(e.cd).forEach(k => { if (e.cd[k] > 0) e.cd[k] -= 1; });
+    p.power = Math.min(p.powerMax, p.power + 15);
+    e.power = Math.min(e.powerMax, e.power + 10);
+
+    renderAll();
+    if (checkGameOver()) return;
+    state.turnLocked = false;
+    updateButtons();
+  }
+
+  // ---- init ----
+  log('interface online — raw exchange rendered as combat for operator legibility', 'lore');
+  log('connection established');
+  log('enemy detected — defenses unknown, run scan to begin');
+  renderAll();
+</script>
+
+</body>
+</html>

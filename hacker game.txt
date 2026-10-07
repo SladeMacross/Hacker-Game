@@ -1,0 +1,3225 @@
+I'll read each file from disk so the code blocks match the files exactly, not my memory of the edits.Still reading each file off disk so the export matches it exactly. I've finished exploration-sample.html and I'm partway through battle-sample-4.html.battle-sample-4.html is done. Next is battle-sample-3.html.battle-sample-3.html is done. Next are the two earliest files, battle-sample.html and battle-screen.html.Last file to read is battle-screen.html, the layout mockup.All five files are read. I'm attaching them for download as well, in case copying from chat mangles anything, and then I'll write out the blocks and the report.Here are all five code files plus the report. The files are also attached as downloads in case copying from chat goes wrong. **`exploration-sample.html` is the current, most complete build.** The other four are earlier versions kept for reference. The two escape-room files you uploaded at the start of this chat are a separate project, so I left them out.
+
+# Part 1: The current code
+
+**exploration-sample.html**
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Exploration + Combat</title>
+<style>
+  :root {
+    --bg: #0a0d0a;
+    --panel: #10140f;
+    --line: #1f2b1c;
+    --line-hover: #3f6b3a;
+    --text: #c8e6c0;
+    --text-dim: #5f7a58;
+    --text-faint: #3a4a36;
+    --accent: #5ee08a;
+    --danger: #e0665e;
+    --warn: #e0c65e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', ui-monospace, monospace;
+  }
+  body {
+    padding: 14px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .note {
+    max-width: 900px;
+    margin: 0 auto 10px;
+    font-size: 10px;
+    color: var(--text-faint);
+    text-align: center;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 12px;
+  }
+  .label {
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    color: var(--text-dim);
+    margin: 0 0 10px;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    margin-bottom: 6px;
+    cursor: pointer;
+  }
+  .row:hover { border-color: var(--line-hover); }
+  .row .tag { font-size: 10px; color: var(--text-dim); }
+  .row .tag.cleared { color: var(--accent); }
+  .row .tag.hostile { color: var(--danger); }
+  .row .tag.node { color: var(--warn); }
+  .coord-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    margin-bottom: 6px;
+  }
+  .coord-row .meta { color: var(--text-dim); font-size: 10px; }
+  button {
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button.danger:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+  button:disabled { color: var(--text-faint); border-color: var(--line); cursor: not-allowed; opacity: 0.5; }
+  .backbar { margin-bottom: 10px; }
+  .hidden { display: none; }
+  #confirmOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 13, 10, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 50;
+  }
+  #confirmOverlay.hidden { display: none; }
+  #confirmOverlay .panel { max-width: 320px; width: 100%; }
+
+  .log {
+    height: 140px;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.6;
+    margin: 8px 0;
+  }
+  .log p { margin: 0; color: var(--text-dim); }
+  .log p.good { color: var(--accent); }
+  .log p.bad { color: var(--danger); }
+  .log p.warn { color: var(--warn); }
+
+  .board2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  .stat-row { display: flex; justify-content: space-between; font-size: 12px; padding: 1px 0; }
+  .stat-row span:first-child { color: var(--text-dim); }
+  .breached-tag { color: var(--warn); font-size: 10px; }
+  .ready-tag { color: var(--accent); }
+
+  .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .submenu { margin-top: 8px; display: none; flex-direction: column; gap: 6px; }
+  .submenu.visible { display: flex; }
+  .submenu button { text-align: left; padding: 8px 10px; }
+  .submenu .opt-meta { color: var(--text-faint); font-size: 10px; }
+
+  .gameover { text-align: center; font-size: 13px; padding: 10px; display: none; }
+  .gameover.visible { display: block; }
+  .gameover.win { color: var(--accent); }
+  .gameover.lose { color: var(--danger); }
+
+  @media (max-width: 600px) {
+    .board2 { grid-template-columns: 1fr; }
+    .actions { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<p class="note">intro → hub → enter matrix → sector select → coordinates → combat, all connected. shopkeeper/manage equipment are placeholders. back buttons return to wherever you actually came from, not a fixed parent. no save system yet, so "continue" is disabled. quit has confirmations on both the hub and intro, matching what was designed.</p>
+
+<div class="wrap">
+
+  <!-- INTRO -->
+  <div id="screenIntro">
+    <div class="panel" style="text-align: center; padding: 40px 20px;">
+      <p class="label" style="font-size: 16px; margin-bottom: 20px;">[ game title placeholder ]</p>
+      <div style="display: flex; flex-direction: column; gap: 8px; max-width: 240px; margin: 0 auto;">
+        <button id="btnStart">new game</button>
+        <button id="btnIntroContinue" disabled title="no saves exist yet">continue</button>
+        <button class="danger" id="btnIntroQuit">quit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLOSED -->
+  <div id="screenClosed" class="hidden"></div>
+
+  <!-- HUB -->
+  <div id="screenHub" class="hidden">
+    <div class="panel" style="text-align: center; padding: 30px 20px;">
+      <p class="label" style="margin-bottom: 20px;">hub</p>
+      <div style="display: flex; flex-direction: column; gap: 8px; max-width: 280px; margin: 0 auto;">
+        <button id="btnGoShopkeeper">shopkeeper</button>
+        <button id="btnGoEquipment">manage equipment</button>
+        <button id="btnGoMatrix">enter matrix</button>
+        <button class="danger" id="btnHubQuit">quit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHOPKEEPER (placeholder) -->
+  <div id="screenShopkeeper" class="hidden">
+    <div class="backbar"><button id="btnBackShopkeeper">back</button></div>
+    <div class="panel">
+      <p class="label">shopkeeper</p>
+      <p class="note" style="margin: 0;">shop, repair, and story delivery live here — not yet built.</p>
+    </div>
+  </div>
+
+  <!-- MANAGE EQUIPMENT (placeholder) -->
+  <div id="screenEquipment" class="hidden">
+    <div class="backbar"><button id="btnBackEquipment">back</button></div>
+    <div class="panel">
+      <p class="label">manage equipment</p>
+      <p class="note" style="margin: 0;">loadout and unit management live here — not yet built.</p>
+    </div>
+  </div>
+
+  <!-- SECTOR SELECT -->
+  <div id="screenSectorSelect" class="hidden">
+    <div class="backbar"><button id="btnBackToHub">back</button></div>
+    <div class="panel">
+      <p class="label">sector select</p>
+      <div id="sectorList"></div>
+    </div>
+  </div>
+
+  <!-- COORDINATE LIST -->
+  <div id="screenCoordList" class="hidden">
+    <div class="backbar"><button id="btnBackToSectors">back</button></div>
+    <div class="panel">
+      <p class="label" id="coordListLabel">sector</p>
+      <div id="coordList"></div>
+    </div>
+  </div>
+
+  <!-- COMBAT -->
+  <div id="screenCombat" class="hidden">
+    <div class="backbar"><button id="btnLeaveCombat" disabled>back (disabled mid-fight)</button></div>
+
+    <div class="board2">
+      <div class="panel" id="playerPanel"><p class="label">operator</p></div>
+      <div class="panel" id="enemyPanel"><p class="label">enemy</p></div>
+    </div>
+
+    <p class="note" id="statusDisplay" style="margin-bottom: 6px;">awaiting engagement</p>
+
+    <div class="panel log" id="log"></div>
+
+    <div class="actions hidden" id="actionButtonsWrap">
+      <button id="btnAttack">attack</button>
+      <button id="btnDefense">defense</button>
+      <button id="btnSkip">skip turn</button>
+      <button class="danger" id="btnDisconnect">disconnect</button>
+    </div>
+
+    <div class="submenu" id="submenu"></div>
+    <div class="gameover" id="gameover"></div>
+    <div id="combatResultBar" class="hidden" style="margin-top: 10px; text-align: center;">
+      <button id="btnReturnToCoords">return to coordinate list</button>
+    </div>
+  </div>
+
+  <!-- CONFIRM OVERLAY -->
+  <div id="confirmOverlay" class="hidden">
+    <div class="panel" style="text-align: center;">
+      <p id="confirmMessage" style="margin: 0 0 12px;"></p>
+      <div style="display: flex; gap: 8px; justify-content: center;">
+        <button class="danger" id="confirmYes">confirm</button>
+        <button id="confirmNo">cancel</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // =========================================================
+  // EXPLORATION DATA
+  // =========================================================
+  const COORDS_PER_SECTOR = 6;
+  const SECTOR_COUNT = 3;
+
+  function randCoordId() {
+    const p = () => String(Math.floor(Math.random() * 90) + 1).padStart(2, '0');
+    return `${p()}.${p()}.${p()}`;
+  }
+
+  function generateSector(name) {
+    const coords = [];
+    const outcomes = [];
+    // weighted outcome pool: 40% empty, 30% node, 30% hostile
+    for (let i = 0; i < COORDS_PER_SECTOR; i++) {
+      const r = Math.random();
+      outcomes.push(r < 0.4 ? 'empty' : r < 0.7 ? 'node' : 'hostile');
+    }
+    for (let i = 0; i < COORDS_PER_SECTOR; i++) {
+      coords.push({ id: randCoordId(), trueType: outcomes[i], revealed: false, defeated: false });
+    }
+    return { name, coords };
+  }
+
+  const sectors = [];
+  for (let i = 1; i <= SECTOR_COUNT; i++) sectors.push(generateSector(`Sector ${i}`));
+
+  let currentSectorIdx = null;
+
+  function sectorCleared(sector) {
+    return sector.coords.every(c => c.revealed && (c.trueType !== 'hostile' || c.defeated));
+  }
+
+  // =========================================================
+  // SCREEN SWITCHING
+  // =========================================================
+  const SCREENS = ['screenIntro', 'screenClosed', 'screenHub', 'screenShopkeeper', 'screenEquipment', 'screenSectorSelect', 'screenCoordList', 'screenCombat'];
+  let currentScreen = null;
+  let screenHistory = [];
+
+  function showScreen(id, isBack) {
+    if (!isBack && currentScreen && currentScreen !== id) screenHistory.push(currentScreen);
+    currentScreen = id;
+    SCREENS.forEach(s => {
+      document.getElementById(s).classList.toggle('hidden', s !== id);
+    });
+  }
+
+  function goBack() {
+    const prev = screenHistory.pop();
+    if (prev) showScreen(prev, true);
+  }
+
+  function showConfirm(message, onConfirm) {
+    const overlay = document.getElementById('confirmOverlay');
+    document.getElementById('confirmMessage').textContent = message;
+    overlay.classList.remove('hidden');
+    const yesBtn = document.getElementById('confirmYes');
+    const noBtn = document.getElementById('confirmNo');
+    const cleanup = () => { overlay.classList.add('hidden'); yesBtn.onclick = null; noBtn.onclick = null; };
+    yesBtn.onclick = () => { cleanup(); onConfirm(); };
+    noBtn.onclick = () => { cleanup(); };
+  }
+
+  document.getElementById('btnStart').addEventListener('click', () => showScreen('screenHub'));
+  document.getElementById('btnIntroQuit').addEventListener('click', () => {
+    showConfirm('Exit the game entirely?', () => showScreen('screenClosed'));
+  });
+
+  document.getElementById('btnGoShopkeeper').addEventListener('click', () => showScreen('screenShopkeeper'));
+  document.getElementById('btnGoEquipment').addEventListener('click', () => showScreen('screenEquipment'));
+  document.getElementById('btnGoMatrix').addEventListener('click', () => showScreen('screenSectorSelect'));
+  document.getElementById('btnHubQuit').addEventListener('click', () => {
+    showConfirm('Return to the intro screen?', () => showScreen('screenIntro'));
+  });
+
+  document.getElementById('btnBackShopkeeper').addEventListener('click', goBack);
+  document.getElementById('btnBackEquipment').addEventListener('click', goBack);
+  document.getElementById('btnBackToHub').addEventListener('click', goBack);
+
+  function renderSectorSelect() {
+    const el = document.getElementById('sectorList');
+    el.innerHTML = '';
+    sectors.forEach((sector, idx) => {
+      const cleared = sectorCleared(sector);
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `<span>${sector.name}</span><span class="tag ${cleared ? 'cleared' : ''}">${cleared ? 'cleared' : 'unresolved coordinates remain'}</span>`;
+      row.addEventListener('click', () => {
+        currentSectorIdx = idx;
+        renderCoordList();
+        showScreen('screenCoordList');
+      });
+      el.appendChild(row);
+    });
+  }
+
+  function renderCoordList() {
+    const sector = sectors[currentSectorIdx];
+    document.getElementById('coordListLabel').textContent = sector.name;
+    const el = document.getElementById('coordList');
+    el.innerHTML = '';
+    sector.coords.forEach((c, idx) => {
+      const row = document.createElement('div');
+      row.className = 'coord-row';
+      let right = '';
+      if (!c.revealed) {
+        right = `<button data-scan="${idx}">scan</button>`;
+      } else if (c.trueType === 'empty') {
+        right = `<span class="meta">clear</span>`;
+      } else if (c.trueType === 'node') {
+        right = `<span class="meta">node — data retrieved</span>`;
+      } else if (c.trueType === 'hostile') {
+        right = c.defeated
+          ? `<span class="meta">cleared</span>`
+          : `<button data-engage="${idx}">engage</button>`;
+      }
+      row.innerHTML = `<span>${c.id}</span>${right}`;
+      el.appendChild(row);
+    });
+
+    el.querySelectorAll('[data-scan]').forEach(b => {
+      b.addEventListener('click', () => {
+        const c = sector.coords[parseInt(b.dataset.scan)];
+        c.revealed = true;
+        renderCoordList();
+      });
+    });
+    el.querySelectorAll('[data-engage]').forEach(b => {
+      b.addEventListener('click', () => {
+        const coordIdx = parseInt(b.dataset.engage);
+        launchCombat(currentSectorIdx, coordIdx);
+      });
+    });
+  }
+
+  document.getElementById('btnBackToSectors').addEventListener('click', () => {
+    renderSectorSelect();
+    goBack();
+  });
+
+  document.getElementById('btnReturnToCoords').addEventListener('click', () => {
+    document.getElementById('combatResultBar').classList.add('hidden');
+    renderCoordList();
+    goBack();
+  });
+
+  // =========================================================
+  // COMBAT ENGINE (ported from battle-sample-4, re-initializable)
+  // =========================================================
+  const TICK_MS = 200;
+  const GAUGE_MAX = 100;
+  const PLAYER_FILL_PER_SEC = 15;
+  const ENEMY_FILL_PER_SEC = 13;
+  const PLAYER_POWER_PER_SEC = 2;
+  const ENEMY_POWER_PER_SEC = 1.6;
+
+  const ACTIONS = {
+    exploit:   { cost: 20, cdSec: 4,  dmgFirewall: 20 },
+    zeroday:   { cost: 40, cdSec: 10, dmgFirewall: 45 },
+    sustained: { cost: 25, cdSec: 5,  tickDmg: 8, tickIntervalSec: 3 },
+    worm:      { cost: 20, cdSec: 2,  dmgConnection: 15 },
+    logicbomb: { cost: 35, cdSec: 6,  dmgConnection: 35 },
+    trojan:    { cost: 20, cdSec: 4,  detonateDmg: 55, fuseSec: 12, exposedMultiplier: 1.5 },
+    jam:       { cost: 15, cdSec: 4,  gaugeSetback: 50 },
+    disable:   { cost: 20, cdSec: 8,  lockSec: 10 },
+    decoy:     { cost: 15, cdSec: 4 },
+    harden:    { cost: 20, cdSec: 5 },
+    eccm:      { cost: 20, cdSec: 6, durationSec: 8 },
+    evict:     { cost: 20, cdSec: 5 },
+    enemyExploit: { cost: 20, cdSec: 4, dmgFirewall: 18 },
+    enemyWorm:    { cost: 15, cdSec: 2, dmgConnection: 12 },
+    enemyJam:     { cost: 15, cdSec: 5, gaugeSetback: 40 },
+    enemyTrojan:  { cost: 20, cdSec: 6, detonateDmg: 40, fuseSec: 10 }
+  };
+
+  let state = null;
+  let combatInterval = null;
+  let onCombatResolved = null; // callback(won: bool)
+
+  function freshCombatState() {
+    return {
+      battleStarted: false,
+      gameOver: false,
+      decisionPause: false,
+      player: {
+        connection: 150, connectionMax: 150,
+        firewall: 60, firewallMax: 60,
+        power: 100, powerMax: 100,
+        cpuTier: 1, ramTier: 1,
+        gauge: 0,
+        cd: { exploit: 0, zeroday: 0, sustained: 0, worm: 0, logicbomb: 0, trojan: 0, jam: 0, disable: 0, decoy: 0, harden: 0, eccm: 0, evict: 0 },
+        sustainedActive: false, sustainedTimer: 0,
+        trojanPending: false, trojanSecLeft: 0,
+        hardenActive: false,
+        eccmActive: false, eccmSecLeft: 0,
+        trojanOnMe: false, trojanOnMeSecLeft: 0
+      },
+      enemy: {
+        connection: 150, connectionMax: 150,
+        firewall: 50, firewallMax: 50,
+        power: 100, powerMax: 100,
+        cpuTier: 1,
+        gauge: 0,
+        cd: { exploit: 0, worm: 0, jam: 0, trojan: 0 },
+        wormLockedSec: 0,
+        decoyWasteNext: false
+      }
+    };
+  }
+
+  const logEl = document.getElementById('log');
+  function log(text, cls) {
+    const p = document.createElement('p');
+    if (cls) p.className = cls;
+    p.textContent = '> ' + text;
+    logEl.appendChild(p);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function renderPlayer() {
+    const p = state.player;
+    const breached = p.firewall <= 0;
+    document.getElementById('playerPanel').innerHTML = `
+      <p class="label">operator</p>
+      <div class="stat-row"><span>connection</span><span>${p.connection}/${p.connectionMax}</span></div>
+      <div class="stat-row"><span>firewall</span><span>${breached ? '<span class="breached-tag">breached</span>' : p.firewall + '/' + p.firewallMax}</span></div>
+      <div class="stat-row"><span>power</span><span>${Math.floor(p.power)}/${p.powerMax}</span></div>
+      <div class="stat-row"><span>cpu</span><span>t${p.cpuTier}</span></div>
+      <div class="stat-row"><span>ram</span><span>t${p.ramTier}</span></div>
+      <div class="stat-row"><span>readiness</span><span>${p.gauge >= GAUGE_MAX ? '<span class="ready-tag">READY — ATTACK AVAILABLE</span>' : Math.floor(p.gauge) + '%'}</span></div>
+      ${p.sustainedActive ? `<div class="stat-row"><span>sustained</span><span style="color:var(--accent)">running</span></div>` : ''}
+      ${p.trojanPending ? `<div class="stat-row"><span>trojan</span><span style="color:var(--danger)">armed — ${p.trojanSecLeft}s · exposed</span></div>` : ''}
+      ${p.hardenActive ? `<div class="stat-row"><span>hardened</span><span style="color:var(--accent)">next hit halved</span></div>` : ''}
+      ${p.eccmActive ? `<div class="stat-row"><span>eccm</span><span style="color:var(--accent)">active — ${Math.ceil(p.eccmSecLeft)}s</span></div>` : ''}
+      ${p.trojanOnMe ? `<div class="stat-row"><span>enemy trojan</span><span style="color:var(--danger)">planted — detonates in ${Math.ceil(p.trojanOnMeSecLeft)}s</span></div>` : ''}
+    `;
+  }
+
+  function renderEnemy() {
+    const e = state.enemy;
+    const breached = e.firewall <= 0;
+    let lockLine = e.wormLockedSec > 0 ? `<div class="stat-row"><span>worm</span><span style="color:var(--warn)">disabled (${e.wormLockedSec}s)</span></div>` : '';
+    document.getElementById('enemyPanel').innerHTML = `
+      <p class="label">enemy</p>
+      <div class="stat-row"><span>connection</span><span>${e.connection}/${e.connectionMax}</span></div>
+      <div class="stat-row"><span>firewall</span><span>${breached ? '<span class="breached-tag">breached</span>' : e.firewall + '/' + e.firewallMax}</span></div>
+      <div class="stat-row"><span>power</span><span>${Math.floor(e.power)}/${e.powerMax}</span></div>
+      <div class="stat-row"><span>cpu</span><span>t${e.cpuTier}</span></div>
+      <div class="stat-row"><span>readiness</span><span>${Math.floor(e.gauge)}%</span></div>
+      ${lockLine}
+    `;
+  }
+
+  function renderAll() { renderPlayer(); renderEnemy(); }
+
+  function updateStatusDisplay() {
+    const el = document.getElementById('statusDisplay');
+    if (!state.battleStarted) { el.textContent = 'awaiting engagement'; return; }
+    if (state.gameOver) { el.textContent = ''; return; }
+    if (state.decisionPause) { el.textContent = 'your readiness is full — choose an action'; return; }
+    el.textContent = 'engagement in progress...';
+  }
+
+  function clearSubmenu() {
+    const sm = document.getElementById('submenu');
+    sm.classList.remove('visible');
+    sm.innerHTML = '';
+  }
+  function makeOption(labelHtml, metaText, enabled, onClick) {
+    const b = document.createElement('button');
+    b.innerHTML = labelHtml + (metaText ? `<div class="opt-meta">${metaText}</div>` : '');
+    b.disabled = !enabled;
+    if (enabled) b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function checkGameOver() {
+    if (state.enemy.connection <= 0) { endGame(true, 'ENEMY CONNECTION SEVERED — HACK SUCCESSFUL'); return true; }
+    if (state.player.connection <= 0) { endGame(false, 'YOUR CONNECTION SEVERED — HACK FAILED'); return true; }
+    return false;
+  }
+  function endGame(win, message) {
+    state.gameOver = true;
+    if (combatInterval) { clearInterval(combatInterval); combatInterval = null; }
+    const go = document.getElementById('gameover');
+    go.textContent = message;
+    go.className = 'gameover visible ' + (win ? 'win' : 'lose');
+    log(message, win ? 'good' : 'bad');
+    updateStatusDisplay();
+    document.getElementById('actionButtonsWrap').classList.add('hidden');
+    document.getElementById('combatResultBar').classList.remove('hidden');
+    if (onCombatResolved) onCombatResolved(win);
+  }
+
+  function openDecisionWindow() {
+    state.decisionPause = true;
+    log('readiness full — awaiting your command', 'warn');
+    updateStatusDisplay();
+    document.getElementById('actionButtonsWrap').classList.remove('hidden');
+  }
+  function closeDecisionWindow() {
+    state.decisionPause = false;
+    state.player.gauge = 0;
+    clearSubmenu();
+    document.getElementById('actionButtonsWrap').classList.add('hidden');
+    updateStatusDisplay();
+    renderAll();
+    checkGameOver();
+  }
+
+  document.getElementById('btnAttack').addEventListener('click', () => {
+    clearSubmenu();
+    const sm = document.getElementById('submenu');
+    const p = state.player, e = state.enemy;
+
+    if (e.firewall > 0) {
+      const bruteReady = p.cd.exploit === 0 && p.power >= ACTIONS.exploit.cost;
+      sm.appendChild(makeOption('brute force', `power ${ACTIONS.exploit.cost} · cooldown ${ACTIONS.exploit.cdSec}s · reliable firewall damage`, bruteReady, () => {
+        p.power -= ACTIONS.exploit.cost;
+        p.cd.exploit = ACTIONS.exploit.cdSec;
+        const dmg = Math.min(e.firewall, ACTIONS.exploit.dmgFirewall);
+        e.firewall -= dmg;
+        if (e.firewall <= 0) { log(`brute force lands — enemy firewall down ${dmg}, BREACHED`, 'good'); p.sustainedActive = false; }
+        else log(`brute force lands — enemy firewall down ${dmg} (${e.firewall} left)`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const zdReady = p.cd.zeroday === 0 && p.power >= ACTIONS.zeroday.cost;
+      sm.appendChild(makeOption('zero-day', `power ${ACTIONS.zeroday.cost} · cooldown ${ACTIONS.zeroday.cdSec}s · rare, massive firewall damage`, zdReady, () => {
+        p.power -= ACTIONS.zeroday.cost;
+        p.cd.zeroday = ACTIONS.zeroday.cdSec;
+        const dmg = Math.min(e.firewall, ACTIONS.zeroday.dmgFirewall);
+        e.firewall -= dmg;
+        if (e.firewall <= 0) { log(`zero-day lands — enemy firewall shattered, BREACHED`, 'good'); p.sustainedActive = false; }
+        else log(`zero-day lands — enemy firewall down ${dmg} (${e.firewall} left)`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const susReady = p.cd.sustained === 0 && p.power >= ACTIONS.sustained.cost;
+      sm.appendChild(makeOption(p.sustainedActive ? 'sustained (refresh)' : 'sustained', `power ${ACTIONS.sustained.cost} · cooldown ${ACTIONS.sustained.cdSec}s · ticks ${ACTIONS.sustained.tickDmg} dmg every ${ACTIONS.sustained.tickIntervalSec}s until breached`, susReady, () => {
+        p.power -= ACTIONS.sustained.cost;
+        p.cd.sustained = ACTIONS.sustained.cdSec;
+        p.sustainedActive = true;
+        p.sustainedTimer = ACTIONS.sustained.tickIntervalSec;
+        log('sustained exploit deployed — ticking against enemy firewall', 'good');
+        closeDecisionWindow();
+      }));
+    } else {
+      const wormReady = p.cd.worm === 0 && p.power >= ACTIONS.worm.cost;
+      sm.appendChild(makeOption('worm', `power ${ACTIONS.worm.cost} · cooldown ${ACTIONS.worm.cdSec}s · reliable connection damage`, wormReady, () => {
+        p.power -= ACTIONS.worm.cost;
+        p.cd.worm = ACTIONS.worm.cdSec;
+        const dmg = Math.min(e.connection, ACTIONS.worm.dmgConnection);
+        e.connection -= dmg;
+        log(`worm deployed — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const lbReady = p.cd.logicbomb === 0 && p.power >= ACTIONS.logicbomb.cost;
+      sm.appendChild(makeOption('logic bomb', `power ${ACTIONS.logicbomb.cost} · cooldown ${ACTIONS.logicbomb.cdSec}s · heavy connection damage`, lbReady, () => {
+        p.power -= ACTIONS.logicbomb.cost;
+        p.cd.logicbomb = ACTIONS.logicbomb.cdSec;
+        const dmg = Math.min(e.connection, ACTIONS.logicbomb.dmgConnection);
+        e.connection -= dmg;
+        log(`logic bomb detonates — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const trojanReady = p.cd.trojan === 0 && p.power >= ACTIONS.trojan.cost && !p.trojanPending;
+      sm.appendChild(makeOption('trojan', p.trojanPending ? 'already armed' : `power ${ACTIONS.trojan.cost} · cooldown ${ACTIONS.trojan.cdSec}s · plants a ${ACTIONS.trojan.fuseSec}s fuse for a massive hit — exposed (${ACTIONS.trojan.exposedMultiplier}x incoming dmg) until it detonates`, trojanReady, () => {
+        p.power -= ACTIONS.trojan.cost;
+        p.cd.trojan = ACTIONS.trojan.cdSec;
+        p.trojanPending = true;
+        p.trojanSecLeft = ACTIONS.trojan.fuseSec;
+        log(`trojan planted — detonates in ${ACTIONS.trojan.fuseSec}s, you are exposed until then`, 'warn');
+        closeDecisionWindow();
+      }));
+
+      const jamReady = p.cd.jam === 0 && p.power >= ACTIONS.jam.cost;
+      sm.appendChild(makeOption('jam', `power ${ACTIONS.jam.cost} · cooldown ${ACTIONS.jam.cdSec}s · knocks enemy readiness back ${ACTIONS.jam.gaugeSetback}%`, jamReady, () => {
+        p.power -= ACTIONS.jam.cost;
+        p.cd.jam = ACTIONS.jam.cdSec;
+        e.gauge = Math.max(0, e.gauge - ACTIONS.jam.gaugeSetback);
+        log(`jam successful — enemy readiness knocked back ${ACTIONS.jam.gaugeSetback}%`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const disableReady = p.cd.disable === 0 && p.power >= ACTIONS.disable.cost;
+      sm.appendChild(makeOption('disable', `power ${ACTIONS.disable.cost} · cooldown ${ACTIONS.disable.cdSec}s · locks enemy worm for ${ACTIONS.disable.lockSec}s`, disableReady, () => {
+        p.power -= ACTIONS.disable.cost;
+        p.cd.disable = ACTIONS.disable.cdSec;
+        e.wormLockedSec = ACTIONS.disable.lockSec;
+        log(`disable deployed — enemy worm offline for ${ACTIONS.disable.lockSec}s`, 'good');
+        closeDecisionWindow();
+      }));
+    }
+
+    sm.classList.add('visible');
+  });
+
+  document.getElementById('btnDefense').addEventListener('click', () => {
+    clearSubmenu();
+    const sm = document.getElementById('submenu');
+    const p = state.player, e = state.enemy;
+
+    const decoyReady = p.cd.decoy === 0 && p.power >= ACTIONS.decoy.cost;
+    sm.appendChild(makeOption('decoy', `power ${ACTIONS.decoy.cost} · cooldown ${ACTIONS.decoy.cdSec}s · enemy wastes its next move, you get a free counter`, decoyReady, () => {
+      p.power -= ACTIONS.decoy.cost;
+      p.cd.decoy = ACTIONS.decoy.cdSec;
+      e.decoyWasteNext = true;
+      log('decoy planted — enemy will waste its next move', 'good');
+      closeDecisionWindow();
+    }));
+
+    const hardenReady = p.cd.harden === 0 && p.power >= ACTIONS.harden.cost;
+    sm.appendChild(makeOption('harden', `power ${ACTIONS.harden.cost} · cooldown ${ACTIONS.harden.cdSec}s · halves the damage of the next hit you take`, hardenReady, () => {
+      p.power -= ACTIONS.harden.cost;
+      p.cd.harden = ACTIONS.harden.cdSec;
+      p.hardenActive = true;
+      log('hardened — braced for the next hit', 'good');
+      closeDecisionWindow();
+    }));
+
+    const eccmReady = p.cd.eccm === 0 && p.power >= ACTIONS.eccm.cost;
+    sm.appendChild(makeOption('eccm', `power ${ACTIONS.eccm.cost} · cooldown ${ACTIONS.eccm.cdSec}s · resists enemy jam attempts for ${ACTIONS.eccm.durationSec}s`, eccmReady, () => {
+      p.power -= ACTIONS.eccm.cost;
+      p.cd.eccm = ACTIONS.eccm.cdSec;
+      p.eccmActive = true;
+      p.eccmSecLeft = ACTIONS.eccm.durationSec;
+      log(`eccm engaged — resisting jam attempts for ${ACTIONS.eccm.durationSec}s`, 'good');
+      closeDecisionWindow();
+    }));
+
+    const evictReady = p.cd.evict === 0 && p.power >= ACTIONS.evict.cost && p.trojanOnMe;
+    sm.appendChild(makeOption('evict', p.trojanOnMe ? `power ${ACTIONS.evict.cost} · cooldown ${ACTIONS.evict.cdSec}s · removes the enemy's planted trojan before it detonates` : 'no threat to evict right now', evictReady, () => {
+      p.power -= ACTIONS.evict.cost;
+      p.cd.evict = ACTIONS.evict.cdSec;
+      p.trojanOnMe = false;
+      p.trojanOnMeSecLeft = 0;
+      log('evicted the enemy trojan before it could detonate', 'good');
+      closeDecisionWindow();
+    }));
+
+    sm.appendChild(makeOption('quarantine', 'not yet available — waiting on units', false, () => {}));
+
+    sm.classList.add('visible');
+  });
+
+  document.getElementById('btnSkip').addEventListener('click', () => {
+    if (!state.decisionPause) return;
+    log('held position — readiness reset', 'warn');
+    closeDecisionWindow();
+  });
+
+  document.getElementById('btnDisconnect').addEventListener('click', () => {
+    if (state.gameOver) return;
+    endGame(false, 'OPERATOR DISCONNECTED — RETREATED');
+  });
+
+  function beginBattle() {
+    state.battleStarted = true;
+    state.player.gauge = GAUGE_MAX;
+    log('target engaged — readiness gauges now active', 'warn');
+    renderAll();
+    openDecisionWindow();
+  }
+
+  function resolveEnemyAction() {
+    const e = state.enemy, p = state.player;
+
+    if (e.decoyWasteNext) {
+      e.decoyWasteNext = false;
+      log('enemy fell for the decoy — move wasted', 'warn');
+      if (e.firewall <= 0) {
+        const dmg = Math.min(e.connection, ACTIONS.worm.dmgConnection);
+        e.connection -= dmg;
+        log(`quick counter lands — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+      }
+      return;
+    }
+
+    let acted = false;
+
+    if (p.firewall > 0) {
+      if (e.cd.exploit === 0 && e.power >= ACTIONS.enemyExploit.cost) {
+        e.power -= ACTIONS.enemyExploit.cost;
+        e.cd.exploit = ACTIONS.enemyExploit.cdSec;
+        let dmg = ACTIONS.enemyExploit.dmgFirewall;
+        if (p.hardenActive) { dmg = Math.round(dmg * 0.5); p.hardenActive = false; log('hardened — hit absorbed, damage halved', 'good'); }
+        dmg = Math.min(p.firewall, dmg);
+        p.firewall -= dmg;
+        if (p.firewall <= 0) log(`enemy exploit lands — your firewall down ${dmg}, BREACHED`, 'bad');
+        else log(`enemy exploit lands — your firewall down ${dmg} (${p.firewall} left)`, 'bad');
+        acted = true;
+      }
+    } else {
+      const candidates = [];
+      if (e.wormLockedSec === 0 && e.cd.worm === 0 && e.power >= ACTIONS.enemyWorm.cost) candidates.push('worm');
+      if (e.cd.jam === 0 && e.power >= ACTIONS.enemyJam.cost) candidates.push('jam');
+      if (e.cd.trojan === 0 && e.power >= ACTIONS.enemyTrojan.cost && !p.trojanOnMe) candidates.push('trojan');
+
+      if (candidates.length > 0) {
+        const choice = candidates[Math.floor(Math.random() * candidates.length)];
+        if (choice === 'worm') {
+          e.power -= ACTIONS.enemyWorm.cost;
+          e.cd.worm = ACTIONS.enemyWorm.cdSec;
+          let dmg = ACTIONS.enemyWorm.dmgConnection;
+          if (p.trojanPending) { dmg = Math.round(dmg * ACTIONS.trojan.exposedMultiplier); log('you are exposed — incoming damage amplified', 'warn'); }
+          if (p.hardenActive) { dmg = Math.round(dmg * 0.5); p.hardenActive = false; log('hardened — hit absorbed, damage halved', 'good'); }
+          dmg = Math.min(p.connection, dmg);
+          p.connection -= dmg;
+          log(`enemy worm lands — your connection down ${dmg} (${p.connection} left)`, 'bad');
+        } else if (choice === 'jam') {
+          e.power -= ACTIONS.enemyJam.cost;
+          e.cd.jam = ACTIONS.enemyJam.cdSec;
+          if (p.eccmActive) {
+            log('eccm resisted the enemy jam attempt', 'good');
+          } else {
+            p.gauge = Math.max(0, p.gauge - ACTIONS.enemyJam.gaugeSetback);
+            log(`enemy jam lands — your readiness knocked back ${ACTIONS.enemyJam.gaugeSetback}%`, 'bad');
+          }
+        } else if (choice === 'trojan') {
+          e.power -= ACTIONS.enemyTrojan.cost;
+          e.cd.trojan = ACTIONS.enemyTrojan.cdSec;
+          p.trojanOnMe = true;
+          p.trojanOnMeSecLeft = ACTIONS.enemyTrojan.fuseSec;
+          log(`enemy trojan planted on you — detonates in ${ACTIONS.enemyTrojan.fuseSec}s unless evicted`, 'bad');
+        }
+        acted = true;
+      }
+    }
+
+    if (!acted) log('enemy holds — insufficient resources or options', 'warn');
+  }
+
+  function combatTick() {
+    if (!state.battleStarted || state.gameOver) return;
+    const dt = TICK_MS / 1000;
+    const p = state.player, e = state.enemy;
+
+    if (!state.decisionPause) {
+      p.power = Math.min(p.powerMax, p.power + PLAYER_POWER_PER_SEC * dt);
+      e.power = Math.min(e.powerMax, e.power + ENEMY_POWER_PER_SEC * dt);
+
+      Object.keys(p.cd).forEach(k => { if (p.cd[k] > 0) p.cd[k] = Math.max(0, p.cd[k] - dt); });
+      Object.keys(e.cd).forEach(k => { if (e.cd[k] > 0) e.cd[k] = Math.max(0, e.cd[k] - dt); });
+      if (e.wormLockedSec > 0) e.wormLockedSec = Math.max(0, e.wormLockedSec - dt);
+
+      if (p.sustainedActive && e.firewall > 0) {
+        p.sustainedTimer -= dt;
+        if (p.sustainedTimer <= 0) {
+          const dmg = Math.min(e.firewall, ACTIONS.sustained.tickDmg);
+          e.firewall -= dmg;
+          p.sustainedTimer = ACTIONS.sustained.tickIntervalSec;
+          if (e.firewall <= 0) { log(`sustained exploit ticks — enemy firewall down ${dmg}, BREACHED`, 'good'); p.sustainedActive = false; }
+          else log(`sustained exploit ticks — enemy firewall down ${dmg} (${e.firewall} left)`, 'good');
+        }
+      }
+
+      if (p.trojanPending) {
+        p.trojanSecLeft -= dt;
+        if (p.trojanSecLeft <= 0) {
+          p.trojanPending = false;
+          const dmg = Math.min(e.connection, ACTIONS.trojan.detonateDmg);
+          e.connection -= dmg;
+          log(`trojan detonates — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+        }
+      }
+
+      if (p.trojanOnMe) {
+        p.trojanOnMeSecLeft -= dt;
+        if (p.trojanOnMeSecLeft <= 0) {
+          p.trojanOnMe = false;
+          const dmg = Math.min(p.connection, ACTIONS.enemyTrojan.detonateDmg);
+          p.connection -= dmg;
+          log(`enemy trojan detonates — your connection down ${dmg} (${p.connection} left)`, 'bad');
+        }
+      }
+
+      if (p.eccmActive) {
+        p.eccmSecLeft -= dt;
+        if (p.eccmSecLeft <= 0) {
+          p.eccmActive = false;
+          log('eccm window expired', 'warn');
+        }
+      }
+
+      p.gauge = Math.min(GAUGE_MAX, p.gauge + PLAYER_FILL_PER_SEC * dt);
+      e.gauge = Math.min(GAUGE_MAX, e.gauge + ENEMY_FILL_PER_SEC * dt);
+
+      if (p.gauge >= GAUGE_MAX) {
+        openDecisionWindow();
+      } else if (e.gauge >= GAUGE_MAX) {
+        resolveEnemyAction();
+        e.gauge = 0;
+      }
+    }
+
+    renderAll();
+    checkGameOver();
+  }
+
+  // =========================================================
+  // LAUNCH / TEARDOWN
+  // =========================================================
+  function launchCombat(sectorIdx, coordIdx) {
+    const coord = sectors[sectorIdx].coords[coordIdx];
+
+    state = freshCombatState();
+    logEl.innerHTML = '';
+    document.getElementById('gameover').className = 'gameover';
+    document.getElementById('combatResultBar').classList.add('hidden');
+    document.getElementById('actionButtonsWrap').classList.add('hidden');
+    clearSubmenu();
+
+    log('interface online — exploit the firewall, then deploy payload', 'warn');
+    log('connection established — enemy firewall intact');
+    renderAll();
+
+    if (combatInterval) clearInterval(combatInterval);
+    combatInterval = setInterval(combatTick, TICK_MS);
+
+    onCombatResolved = (won) => {
+      if (won) coord.defeated = true;
+      // on loss, the coordinate just stays hostile/undefeated — retry later
+    };
+
+    showScreen('screenCombat');
+    beginBattle();
+  }
+
+  // =========================================================
+  // INIT
+  // =========================================================
+  renderSectorSelect();
+  showScreen('screenIntro');
+</script>
+
+</body>
+</html>
+```
+
+**battle-sample-4.html**
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Battle Sample 4 — ATB</title>
+<style>
+  :root {
+    --bg: #0a0d0a;
+    --panel: #10140f;
+    --line: #1f2b1c;
+    --text: #c8e6c0;
+    --text-dim: #5f7a58;
+    --text-faint: #3a4a36;
+    --accent: #5ee08a;
+    --danger: #e0665e;
+    --warn: #e0c65e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', ui-monospace, monospace;
+  }
+  body {
+    padding: 14px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .note {
+    max-width: 900px;
+    margin: 0 auto 10px;
+    font-size: 10px;
+    color: var(--text-faint);
+    text-align: center;
+  }
+  .board {
+    max-width: 900px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 12px;
+  }
+  .label {
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    color: var(--text-dim);
+    margin: 0 0 8px;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 1px 0;
+  }
+  .stat-row span:first-child { color: var(--text-dim); }
+  .breached-tag { color: var(--warn); font-size: 10px; }
+  .ready-tag { color: var(--accent); }
+
+  .log {
+    max-width: 900px;
+    margin: 8px auto;
+    height: 140px;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.6;
+  }
+  .log p { margin: 0; color: var(--text-dim); }
+  .log p.good { color: var(--accent); }
+  .log p.bad { color: var(--danger); }
+  .log p.warn { color: var(--warn); }
+
+  .actions {
+    max-width: 900px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  button {
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 4px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button.disconnect:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+  button:disabled { color: var(--text-faint); border-color: var(--line); cursor: not-allowed; opacity: 0.5; }
+
+  .submenu {
+    max-width: 900px;
+    margin: 8px auto 0;
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .submenu.visible { display: flex; }
+  .submenu button { text-align: left; padding: 8px 10px; }
+  .submenu .opt-meta { color: var(--text-faint); font-size: 10px; }
+
+  .gameover {
+    max-width: 900px;
+    margin: 10px auto 0;
+    text-align: center;
+    font-size: 13px;
+    padding: 10px;
+    display: none;
+  }
+  .gameover.visible { display: block; }
+  .gameover.win { color: var(--accent); }
+  .gameover.lose { color: var(--danger); }
+
+  @media (max-width: 600px) {
+    .board { grid-template-columns: 1fr; }
+    .actions { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<p class="note">sample 4 — defense is now decoy/harden/eccm/evict, all live. enemy can now jam you and plant its own trojan once your firewall is breached, chosen randomly among whatever it can afford. quarantine still waits on units; encryption's anti-hijack role waits on units too.</p>
+
+<div class="board">
+  <div class="panel" id="playerPanel"><p class="label">operator</p></div>
+  <div class="panel" id="enemyPanel"><p class="label">enemy</p></div>
+</div>
+
+<p class="note" id="statusDisplay" style="margin-bottom: 6px;">awaiting engagement</p>
+
+<div class="panel log" id="log"></div>
+
+<div id="engageWrap" style="max-width: 900px; margin: 0 auto;">
+  <button id="btnEngage" style="width: 100%; padding: 14px 0; font-size: 14px;">engage target</button>
+</div>
+
+<div class="actions" id="actionButtonsWrap" style="display: none;">
+  <button id="btnAttack">attack</button>
+  <button id="btnDefense">defense</button>
+  <button id="btnSkip">skip</button>
+  <button class="disconnect" id="btnDisconnect">disconnect</button>
+</div>
+
+<div class="submenu" id="submenu"></div>
+<div class="gameover" id="gameover"></div>
+
+<script>
+  const TICK_MS = 200;
+  const GAUGE_MAX = 100;
+  const PLAYER_FILL_PER_SEC = 15;
+  const ENEMY_FILL_PER_SEC = 13;
+  const PLAYER_POWER_PER_SEC = 2;
+  const ENEMY_POWER_PER_SEC = 1.6;
+
+  const ACTIONS = {
+    exploit:   { cost: 20, cdSec: 4,  dmgFirewall: 20 },
+    zeroday:   { cost: 40, cdSec: 10, dmgFirewall: 45 },
+    sustained: { cost: 25, cdSec: 5,  tickDmg: 8, tickIntervalSec: 3 },
+    worm:      { cost: 20, cdSec: 2,  dmgConnection: 15 },
+    logicbomb: { cost: 35, cdSec: 6,  dmgConnection: 35 },
+    trojan:    { cost: 20, cdSec: 4,  detonateDmg: 55, fuseSec: 12, exposedMultiplier: 1.5 },
+    jam:       { cost: 15, cdSec: 4,  gaugeSetback: 50 },
+    disable:   { cost: 20, cdSec: 8,  lockSec: 10 },
+    decoy:     { cost: 15, cdSec: 4 },
+    harden:    { cost: 20, cdSec: 5 },
+    eccm:      { cost: 20, cdSec: 6, durationSec: 8 },
+    evict:     { cost: 20, cdSec: 5 },
+    enemyExploit: { cost: 20, cdSec: 4, dmgFirewall: 18 },
+    enemyWorm:    { cost: 15, cdSec: 2, dmgConnection: 12 },
+    enemyJam:     { cost: 15, cdSec: 5, gaugeSetback: 40 },
+    enemyTrojan:  { cost: 20, cdSec: 6, detonateDmg: 40, fuseSec: 10 }
+  };
+
+  const state = {
+    battleStarted: false,
+    gameOver: false,
+    decisionPause: false,
+    player: {
+      connection: 150, connectionMax: 150,
+      firewall: 60, firewallMax: 60,
+      power: 100, powerMax: 100,
+      cpuTier: 1, ramTier: 1,
+      gauge: 0,
+      cd: { exploit: 0, zeroday: 0, sustained: 0, worm: 0, logicbomb: 0, trojan: 0, jam: 0, disable: 0, decoy: 0, harden: 0, eccm: 0, evict: 0 },
+      sustainedActive: false, sustainedTimer: 0,
+      trojanPending: false, trojanSecLeft: 0,
+      hardenActive: false,
+      eccmActive: false, eccmSecLeft: 0,
+      trojanOnMe: false, trojanOnMeSecLeft: 0
+    },
+    enemy: {
+      connection: 150, connectionMax: 150,
+      firewall: 50, firewallMax: 50,
+      power: 100, powerMax: 100,
+      cpuTier: 1,
+      gauge: 0,
+      cd: { exploit: 0, worm: 0, jam: 0, trojan: 0 },
+      wormLockedSec: 0,
+      decoyWasteNext: false
+    }
+  };
+
+  const logEl = document.getElementById('log');
+  function log(text, cls) {
+    const p = document.createElement('p');
+    if (cls) p.className = cls;
+    p.textContent = '> ' + text;
+    logEl.appendChild(p);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function renderPlayer() {
+    const p = state.player;
+    const breached = p.firewall <= 0;
+    document.getElementById('playerPanel').innerHTML = `
+      <p class="label">operator</p>
+      <div class="stat-row"><span>connection</span><span>${p.connection}/${p.connectionMax}</span></div>
+      <div class="stat-row"><span>firewall</span><span>${breached ? '<span class="breached-tag">breached</span>' : p.firewall + '/' + p.firewallMax}</span></div>
+      <div class="stat-row"><span>power</span><span>${Math.floor(p.power)}/${p.powerMax}</span></div>
+      <div class="stat-row"><span>cpu</span><span>t${p.cpuTier}</span></div>
+      <div class="stat-row"><span>ram</span><span>t${p.ramTier}</span></div>
+      <div class="stat-row"><span>readiness</span><span>${p.gauge >= GAUGE_MAX ? '<span class="ready-tag">READY — ATTACK AVAILABLE</span>' : Math.floor(p.gauge) + '%'}</span></div>
+      ${p.sustainedActive ? `<div class="stat-row"><span>sustained</span><span style="color:var(--accent)">running</span></div>` : ''}
+      ${p.trojanPending ? `<div class="stat-row"><span>trojan</span><span style="color:var(--danger)">armed — ${p.trojanSecLeft}s · exposed</span></div>` : ''}
+      ${p.hardenActive ? `<div class="stat-row"><span>hardened</span><span style="color:var(--accent)">next hit halved</span></div>` : ''}
+      ${p.eccmActive ? `<div class="stat-row"><span>eccm</span><span style="color:var(--accent)">active — ${Math.ceil(p.eccmSecLeft)}s</span></div>` : ''}
+      ${p.trojanOnMe ? `<div class="stat-row"><span>enemy trojan</span><span style="color:var(--danger)">planted — detonates in ${Math.ceil(p.trojanOnMeSecLeft)}s</span></div>` : ''}
+    `;
+  }
+
+  function renderEnemy() {
+    const e = state.enemy;
+    const breached = e.firewall <= 0;
+    let lockLine = e.wormLockedSec > 0 ? `<div class="stat-row"><span>worm</span><span style="color:var(--warn)">disabled (${e.wormLockedSec}s)</span></div>` : '';
+    document.getElementById('enemyPanel').innerHTML = `
+      <p class="label">enemy</p>
+      <div class="stat-row"><span>connection</span><span>${e.connection}/${e.connectionMax}</span></div>
+      <div class="stat-row"><span>firewall</span><span>${breached ? '<span class="breached-tag">breached</span>' : e.firewall + '/' + e.firewallMax}</span></div>
+      <div class="stat-row"><span>power</span><span>${Math.floor(e.power)}/${e.powerMax}</span></div>
+      <div class="stat-row"><span>cpu</span><span>t${e.cpuTier}</span></div>
+      <div class="stat-row"><span>readiness</span><span>${Math.floor(e.gauge)}%</span></div>
+      ${lockLine}
+    `;
+  }
+
+  function renderAll() { renderPlayer(); renderEnemy(); }
+
+  function updateStatusDisplay() {
+    const el = document.getElementById('statusDisplay');
+    if (!state.battleStarted) { el.textContent = 'awaiting engagement'; return; }
+    if (state.gameOver) { el.textContent = ''; return; }
+    if (state.decisionPause) { el.textContent = 'your readiness is full — choose an action'; return; }
+    el.textContent = 'engagement in progress...';
+  }
+
+  function clearSubmenu() {
+    const sm = document.getElementById('submenu');
+    sm.classList.remove('visible');
+    sm.innerHTML = '';
+  }
+  function makeOption(labelHtml, metaText, enabled, onClick) {
+    const b = document.createElement('button');
+    b.innerHTML = labelHtml + (metaText ? `<div class="opt-meta">${metaText}</div>` : '');
+    b.disabled = !enabled;
+    if (enabled) b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function checkGameOver() {
+    if (state.enemy.connection <= 0) { endGame(true, 'ENEMY CONNECTION SEVERED — HACK SUCCESSFUL'); return true; }
+    if (state.player.connection <= 0) { endGame(false, 'YOUR CONNECTION SEVERED — HACK FAILED'); return true; }
+    return false;
+  }
+  function endGame(win, message) {
+    state.gameOver = true;
+    const go = document.getElementById('gameover');
+    go.textContent = message;
+    go.className = 'gameover visible ' + (win ? 'win' : 'lose');
+    log(message, win ? 'good' : 'bad');
+    updateStatusDisplay();
+    document.getElementById('actionButtonsWrap').style.display = 'none';
+  }
+
+  // ---- entering/leaving the decision pause ----
+  function openDecisionWindow() {
+    state.decisionPause = true;
+    log('readiness full — awaiting your command', 'warn');
+    updateStatusDisplay();
+    document.getElementById('actionButtonsWrap').style.display = '';
+  }
+  function closeDecisionWindow() {
+    state.decisionPause = false;
+    state.player.gauge = 0;
+    clearSubmenu();
+    document.getElementById('actionButtonsWrap').style.display = 'none';
+    updateStatusDisplay();
+    renderAll();
+    checkGameOver();
+  }
+
+  // ---- player: attack menu ----
+  document.getElementById('btnAttack').addEventListener('click', () => {
+    clearSubmenu();
+    const sm = document.getElementById('submenu');
+    const p = state.player, e = state.enemy;
+
+    if (e.firewall > 0) {
+      // --- exploit phase ---
+      const bruteReady = p.cd.exploit === 0 && p.power >= ACTIONS.exploit.cost;
+      sm.appendChild(makeOption('brute force', `power ${ACTIONS.exploit.cost} · cooldown ${ACTIONS.exploit.cdSec}s · reliable firewall damage`, bruteReady, () => {
+        p.power -= ACTIONS.exploit.cost;
+        p.cd.exploit = ACTIONS.exploit.cdSec;
+        const dmg = Math.min(e.firewall, ACTIONS.exploit.dmgFirewall);
+        e.firewall -= dmg;
+        if (e.firewall <= 0) { log(`brute force lands — enemy firewall down ${dmg}, BREACHED`, 'good'); p.sustainedActive = false; }
+        else log(`brute force lands — enemy firewall down ${dmg} (${e.firewall} left)`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const zdReady = p.cd.zeroday === 0 && p.power >= ACTIONS.zeroday.cost;
+      sm.appendChild(makeOption('zero-day', `power ${ACTIONS.zeroday.cost} · cooldown ${ACTIONS.zeroday.cdSec}s · rare, massive firewall damage`, zdReady, () => {
+        p.power -= ACTIONS.zeroday.cost;
+        p.cd.zeroday = ACTIONS.zeroday.cdSec;
+        const dmg = Math.min(e.firewall, ACTIONS.zeroday.dmgFirewall);
+        e.firewall -= dmg;
+        if (e.firewall <= 0) { log(`zero-day lands — enemy firewall shattered, BREACHED`, 'good'); p.sustainedActive = false; }
+        else log(`zero-day lands — enemy firewall down ${dmg} (${e.firewall} left)`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const susReady = p.cd.sustained === 0 && p.power >= ACTIONS.sustained.cost;
+      sm.appendChild(makeOption(p.sustainedActive ? 'sustained (refresh)' : 'sustained', `power ${ACTIONS.sustained.cost} · cooldown ${ACTIONS.sustained.cdSec}s · ticks ${ACTIONS.sustained.tickDmg} dmg every ${ACTIONS.sustained.tickIntervalSec}s until breached`, susReady, () => {
+        p.power -= ACTIONS.sustained.cost;
+        p.cd.sustained = ACTIONS.sustained.cdSec;
+        p.sustainedActive = true;
+        p.sustainedTimer = ACTIONS.sustained.tickIntervalSec;
+        log('sustained exploit deployed — ticking against enemy firewall', 'good');
+        closeDecisionWindow();
+      }));
+    } else {
+      // --- payload phase + disruption ---
+      const wormReady = p.cd.worm === 0 && p.power >= ACTIONS.worm.cost;
+      sm.appendChild(makeOption('worm', `power ${ACTIONS.worm.cost} · cooldown ${ACTIONS.worm.cdSec}s · reliable connection damage`, wormReady, () => {
+        p.power -= ACTIONS.worm.cost;
+        p.cd.worm = ACTIONS.worm.cdSec;
+        const dmg = Math.min(e.connection, ACTIONS.worm.dmgConnection);
+        e.connection -= dmg;
+        log(`worm deployed — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const lbReady = p.cd.logicbomb === 0 && p.power >= ACTIONS.logicbomb.cost;
+      sm.appendChild(makeOption('logic bomb', `power ${ACTIONS.logicbomb.cost} · cooldown ${ACTIONS.logicbomb.cdSec}s · heavy connection damage`, lbReady, () => {
+        p.power -= ACTIONS.logicbomb.cost;
+        p.cd.logicbomb = ACTIONS.logicbomb.cdSec;
+        const dmg = Math.min(e.connection, ACTIONS.logicbomb.dmgConnection);
+        e.connection -= dmg;
+        log(`logic bomb detonates — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const trojanReady = p.cd.trojan === 0 && p.power >= ACTIONS.trojan.cost && !p.trojanPending;
+      sm.appendChild(makeOption('trojan', p.trojanPending ? 'already armed' : `power ${ACTIONS.trojan.cost} · cooldown ${ACTIONS.trojan.cdSec}s · plants a ${ACTIONS.trojan.fuseSec}s fuse for a massive hit — exposed (${ACTIONS.trojan.exposedMultiplier}x incoming dmg) until it detonates`, trojanReady, () => {
+        p.power -= ACTIONS.trojan.cost;
+        p.cd.trojan = ACTIONS.trojan.cdSec;
+        p.trojanPending = true;
+        p.trojanSecLeft = ACTIONS.trojan.fuseSec;
+        log(`trojan planted — detonates in ${ACTIONS.trojan.fuseSec}s, you are exposed until then`, 'warn');
+        closeDecisionWindow();
+      }));
+
+      const jamReady = p.cd.jam === 0 && p.power >= ACTIONS.jam.cost;
+      sm.appendChild(makeOption('jam', `power ${ACTIONS.jam.cost} · cooldown ${ACTIONS.jam.cdSec}s · knocks enemy readiness back ${ACTIONS.jam.gaugeSetback}%`, jamReady, () => {
+        p.power -= ACTIONS.jam.cost;
+        p.cd.jam = ACTIONS.jam.cdSec;
+        e.gauge = Math.max(0, e.gauge - ACTIONS.jam.gaugeSetback);
+        log(`jam successful — enemy readiness knocked back ${ACTIONS.jam.gaugeSetback}%`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const disableReady = p.cd.disable === 0 && p.power >= ACTIONS.disable.cost;
+      sm.appendChild(makeOption('disable', `power ${ACTIONS.disable.cost} · cooldown ${ACTIONS.disable.cdSec}s · locks enemy worm for ${ACTIONS.disable.lockSec}s`, disableReady, () => {
+        p.power -= ACTIONS.disable.cost;
+        p.cd.disable = ACTIONS.disable.cdSec;
+        e.wormLockedSec = ACTIONS.disable.lockSec;
+        log(`disable deployed — enemy worm offline for ${ACTIONS.disable.lockSec}s`, 'good');
+        closeDecisionWindow();
+      }));
+    }
+
+    sm.classList.add('visible');
+  });
+
+  // ---- player: defense menu (decoy only for now) ----
+  document.getElementById('btnDefense').addEventListener('click', () => {
+    clearSubmenu();
+    const sm = document.getElementById('submenu');
+    const p = state.player, e = state.enemy;
+
+    const decoyReady = p.cd.decoy === 0 && p.power >= ACTIONS.decoy.cost;
+    sm.appendChild(makeOption('decoy', `power ${ACTIONS.decoy.cost} · cooldown ${ACTIONS.decoy.cdSec}s · enemy wastes its next move, you get a free counter`, decoyReady, () => {
+      p.power -= ACTIONS.decoy.cost;
+      p.cd.decoy = ACTIONS.decoy.cdSec;
+      e.decoyWasteNext = true;
+      log('decoy planted — enemy will waste its next move', 'good');
+      closeDecisionWindow();
+    }));
+
+    const hardenReady = p.cd.harden === 0 && p.power >= ACTIONS.harden.cost;
+    sm.appendChild(makeOption('harden', `power ${ACTIONS.harden.cost} · cooldown ${ACTIONS.harden.cdSec}s · halves the damage of the next hit you take`, hardenReady, () => {
+      p.power -= ACTIONS.harden.cost;
+      p.cd.harden = ACTIONS.harden.cdSec;
+      p.hardenActive = true;
+      log('hardened — braced for the next hit', 'good');
+      closeDecisionWindow();
+    }));
+
+    const eccmReady = p.cd.eccm === 0 && p.power >= ACTIONS.eccm.cost;
+    sm.appendChild(makeOption('eccm', `power ${ACTIONS.eccm.cost} · cooldown ${ACTIONS.eccm.cdSec}s · resists enemy jam attempts for ${ACTIONS.eccm.durationSec}s`, eccmReady, () => {
+      p.power -= ACTIONS.eccm.cost;
+      p.cd.eccm = ACTIONS.eccm.cdSec;
+      p.eccmActive = true;
+      p.eccmSecLeft = ACTIONS.eccm.durationSec;
+      log(`eccm engaged — resisting jam attempts for ${ACTIONS.eccm.durationSec}s`, 'good');
+      closeDecisionWindow();
+    }));
+
+    const evictReady = p.cd.evict === 0 && p.power >= ACTIONS.evict.cost && p.trojanOnMe;
+    sm.appendChild(makeOption('evict', p.trojanOnMe ? `power ${ACTIONS.evict.cost} · cooldown ${ACTIONS.evict.cdSec}s · removes the enemy's planted trojan before it detonates` : 'no threat to evict right now', evictReady, () => {
+      p.power -= ACTIONS.evict.cost;
+      p.cd.evict = ACTIONS.evict.cdSec;
+      p.trojanOnMe = false;
+      p.trojanOnMeSecLeft = 0;
+      log('evicted the enemy trojan before it could detonate', 'good');
+      closeDecisionWindow();
+    }));
+
+    sm.appendChild(makeOption('quarantine', 'not yet available — waiting on units', false, () => {}));
+
+    sm.classList.add('visible');
+  });
+
+  document.getElementById('btnSkip').addEventListener('click', () => {
+    if (!state.decisionPause) return;
+    log('held position — readiness reset', 'warn');
+    closeDecisionWindow();
+  });
+
+  document.getElementById('btnDisconnect').addEventListener('click', () => {
+    if (state.gameOver) return;
+    endGame(false, 'OPERATOR DISCONNECTED — RETREATED');
+  });
+
+  document.getElementById('btnEngage').addEventListener('click', () => {
+    state.battleStarted = true;
+    state.player.gauge = GAUGE_MAX;
+    document.getElementById('engageWrap').style.display = 'none';
+    log('target engaged — readiness gauges now active', 'warn');
+    renderAll();
+    openDecisionWindow();
+  });
+
+  // ---- enemy action resolution (fires the instant enemy.gauge hits 100) ----
+  function resolveEnemyAction() {
+    const e = state.enemy, p = state.player;
+
+    if (e.decoyWasteNext) {
+      e.decoyWasteNext = false;
+      log('enemy fell for the decoy — move wasted', 'warn');
+      if (e.firewall <= 0) {
+        const dmg = Math.min(e.connection, ACTIONS.worm.dmgConnection);
+        e.connection -= dmg;
+        log(`quick counter lands — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+      }
+      return;
+    }
+
+    let acted = false;
+
+    if (p.firewall > 0) {
+      if (e.cd.exploit === 0 && e.power >= ACTIONS.enemyExploit.cost) {
+        e.power -= ACTIONS.enemyExploit.cost;
+        e.cd.exploit = ACTIONS.enemyExploit.cdSec;
+        let dmg = ACTIONS.enemyExploit.dmgFirewall;
+        if (p.hardenActive) { dmg = Math.round(dmg * 0.5); p.hardenActive = false; log('hardened — hit absorbed, damage halved', 'good'); }
+        dmg = Math.min(p.firewall, dmg);
+        p.firewall -= dmg;
+        if (p.firewall <= 0) log(`enemy exploit lands — your firewall down ${dmg}, BREACHED`, 'bad');
+        else log(`enemy exploit lands — your firewall down ${dmg} (${p.firewall} left)`, 'bad');
+        acted = true;
+      }
+    } else {
+      // post-breach: enemy picks randomly among whatever's actually ready
+      const candidates = [];
+      if (e.wormLockedSec === 0 && e.cd.worm === 0 && e.power >= ACTIONS.enemyWorm.cost) candidates.push('worm');
+      if (e.cd.jam === 0 && e.power >= ACTIONS.enemyJam.cost) candidates.push('jam');
+      if (e.cd.trojan === 0 && e.power >= ACTIONS.enemyTrojan.cost && !p.trojanOnMe) candidates.push('trojan');
+
+      if (candidates.length > 0) {
+        const choice = candidates[Math.floor(Math.random() * candidates.length)];
+        if (choice === 'worm') {
+          e.power -= ACTIONS.enemyWorm.cost;
+          e.cd.worm = ACTIONS.enemyWorm.cdSec;
+          let dmg = ACTIONS.enemyWorm.dmgConnection;
+          if (p.trojanPending) { dmg = Math.round(dmg * ACTIONS.trojan.exposedMultiplier); log('you are exposed — incoming damage amplified', 'warn'); }
+          if (p.hardenActive) { dmg = Math.round(dmg * 0.5); p.hardenActive = false; log('hardened — hit absorbed, damage halved', 'good'); }
+          dmg = Math.min(p.connection, dmg);
+          p.connection -= dmg;
+          log(`enemy worm lands — your connection down ${dmg} (${p.connection} left)`, 'bad');
+        } else if (choice === 'jam') {
+          e.power -= ACTIONS.enemyJam.cost;
+          e.cd.jam = ACTIONS.enemyJam.cdSec;
+          if (p.eccmActive) {
+            log('eccm resisted the enemy jam attempt', 'good');
+          } else {
+            p.gauge = Math.max(0, p.gauge - ACTIONS.enemyJam.gaugeSetback);
+            log(`enemy jam lands — your readiness knocked back ${ACTIONS.enemyJam.gaugeSetback}%`, 'bad');
+          }
+        } else if (choice === 'trojan') {
+          e.power -= ACTIONS.enemyTrojan.cost;
+          e.cd.trojan = ACTIONS.enemyTrojan.cdSec;
+          p.trojanOnMe = true;
+          p.trojanOnMeSecLeft = ACTIONS.enemyTrojan.fuseSec;
+          log(`enemy trojan planted on you — detonates in ${ACTIONS.enemyTrojan.fuseSec}s unless evicted`, 'bad');
+        }
+        acted = true;
+      }
+    }
+
+    if (!acted) log('enemy holds — insufficient resources or options', 'warn');
+  }
+
+  // ---- main tick loop ----
+  setInterval(() => {
+    if (!state.battleStarted || state.gameOver) return;
+    const dt = TICK_MS / 1000;
+    const p = state.player, e = state.enemy;
+
+    if (!state.decisionPause) {
+      // power — pauses along with everything else while you're choosing
+      p.power = Math.min(p.powerMax, p.power + PLAYER_POWER_PER_SEC * dt);
+      e.power = Math.min(e.powerMax, e.power + ENEMY_POWER_PER_SEC * dt);
+
+      // cooldowns
+      Object.keys(p.cd).forEach(k => { if (p.cd[k] > 0) p.cd[k] = Math.max(0, p.cd[k] - dt); });
+      Object.keys(e.cd).forEach(k => { if (e.cd[k] > 0) e.cd[k] = Math.max(0, e.cd[k] - dt); });
+      if (e.wormLockedSec > 0) e.wormLockedSec = Math.max(0, e.wormLockedSec - dt);
+
+      // sustained exploit ticking
+      if (p.sustainedActive && e.firewall > 0) {
+        p.sustainedTimer -= dt;
+        if (p.sustainedTimer <= 0) {
+          const dmg = Math.min(e.firewall, ACTIONS.sustained.tickDmg);
+          e.firewall -= dmg;
+          p.sustainedTimer = ACTIONS.sustained.tickIntervalSec;
+          if (e.firewall <= 0) { log(`sustained exploit ticks — enemy firewall down ${dmg}, BREACHED`, 'good'); p.sustainedActive = false; }
+          else log(`sustained exploit ticks — enemy firewall down ${dmg} (${e.firewall} left)`, 'good');
+        }
+      }
+
+      // trojan fuse (yours, planted on them)
+      if (p.trojanPending) {
+        p.trojanSecLeft -= dt;
+        if (p.trojanSecLeft <= 0) {
+          p.trojanPending = false;
+          const dmg = Math.min(e.connection, ACTIONS.trojan.detonateDmg);
+          e.connection -= dmg;
+          log(`trojan detonates — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+        }
+      }
+
+      // enemy's trojan, planted on you
+      if (p.trojanOnMe) {
+        p.trojanOnMeSecLeft -= dt;
+        if (p.trojanOnMeSecLeft <= 0) {
+          p.trojanOnMe = false;
+          const dmg = Math.min(p.connection, ACTIONS.enemyTrojan.detonateDmg);
+          p.connection -= dmg;
+          log(`enemy trojan detonates — your connection down ${dmg} (${p.connection} left)`, 'bad');
+        }
+      }
+
+      // eccm window
+      if (p.eccmActive) {
+        p.eccmSecLeft -= dt;
+        if (p.eccmSecLeft <= 0) {
+          p.eccmActive = false;
+          log('eccm window expired', 'warn');
+        }
+      }
+
+      // readiness gauges
+      p.gauge = Math.min(GAUGE_MAX, p.gauge + PLAYER_FILL_PER_SEC * dt);
+      e.gauge = Math.min(GAUGE_MAX, e.gauge + ENEMY_FILL_PER_SEC * dt);
+
+      if (p.gauge >= GAUGE_MAX) {
+        openDecisionWindow();
+      } else if (e.gauge >= GAUGE_MAX) {
+        resolveEnemyAction();
+        e.gauge = 0;
+      }
+    }
+
+    renderAll();
+    if (checkGameOver()) return;
+  }, TICK_MS);
+
+  log('interface online — exploit the firewall, then deploy payload', 'warn');
+  log('connection established — enemy firewall intact');
+  renderAll();
+  updateStatusDisplay();
+</script>
+
+</body>
+</html>
+```
+
+**battle-sample-3.html**
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Battle Sample 3</title>
+<style>
+  :root {
+    --bg: #0a0d0a;
+    --panel: #10140f;
+    --line: #1f2b1c;
+    --text: #c8e6c0;
+    --text-dim: #5f7a58;
+    --text-faint: #3a4a36;
+    --accent: #5ee08a;
+    --danger: #e0665e;
+    --warn: #e0c65e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', ui-monospace, monospace;
+  }
+  body {
+    padding: 14px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .note {
+    max-width: 900px;
+    margin: 0 auto 10px;
+    font-size: 10px;
+    color: var(--text-faint);
+    text-align: center;
+  }
+  .board {
+    max-width: 900px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 12px;
+  }
+  .label {
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    color: var(--text-dim);
+    margin: 0 0 8px;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 1px 0;
+  }
+  .stat-row span:first-child { color: var(--text-dim); }
+  .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin: 2px 0 4px; }
+  .bar > div { height: 100%; background: var(--accent); }
+  .bar.firewall > div { background: var(--warn); }
+  .bar.power > div { background: #8fb0e8; }
+  .breached-tag { color: var(--warn); font-size: 10px; }
+
+  .log {
+    max-width: 900px;
+    margin: 8px auto;
+    height: 140px;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.6;
+  }
+  .log p { margin: 0; color: var(--text-dim); }
+  .log p.good { color: var(--accent); }
+  .log p.bad { color: var(--danger); }
+  .log p.warn { color: var(--warn); }
+
+  .actions {
+    max-width: 900px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  button {
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 4px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button.disconnect:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+  button:disabled { color: var(--text-faint); border-color: var(--line); cursor: not-allowed; opacity: 0.5; }
+
+  .submenu {
+    max-width: 900px;
+    margin: 8px auto 0;
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .submenu.visible { display: flex; }
+  .submenu button { text-align: left; padding: 8px 10px; }
+  .submenu .opt-meta { color: var(--text-faint); font-size: 10px; }
+
+  .gameover {
+    max-width: 900px;
+    margin: 10px auto 0;
+    text-align: center;
+    font-size: 13px;
+    padding: 10px;
+    display: none;
+  }
+  .gameover.visible { display: block; }
+  .gameover.win { color: var(--accent); }
+  .gameover.lose { color: var(--danger); }
+
+  @media (max-width: 600px) {
+    .board { grid-template-columns: 1fr; }
+    .actions { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<p class="note">sample 3 — attack/defense/skip/disconnect. attack shows exploit options pre-breach, payload options post-breach. defense (decoy/jam/disable) still requires breach, same as before — just recategorized. enemy doesn't attack yet (no enemy ai for it) — defense can't be tested as a reaction until that exists.</p>
+
+<div class="board">
+  <div class="panel" id="playerPanel"><p class="label">operator</p></div>
+  <div class="panel" id="enemyPanel"><p class="label">enemy</p></div>
+</div>
+
+<p class="note" id="turnTimerDisplay" style="margin-bottom: 6px;">awaiting engagement</p>
+
+<div class="panel log" id="log"></div>
+
+<div id="engageWrap" style="max-width: 900px; margin: 0 auto;">
+  <button id="btnEngage" style="width: 100%; padding: 14px 0; font-size: 14px;">engage target</button>
+</div>
+
+<div class="actions" id="actionButtonsWrap" style="display: none;">
+  <button id="btnAttack">attack</button>
+  <button id="btnDefense">defense</button>
+  <button id="btnSkip">skip</button>
+  <button class="disconnect" id="btnDisconnect">disconnect</button>
+</div>
+
+<div class="submenu" id="submenu"></div>
+<div class="gameover" id="gameover"></div>
+
+<script>
+  const TURN_TIME_LIMIT = 10;
+  const CONTINUOUS_POWER_PER_SEC = 2;
+
+  const state = {
+    battleStarted: false,
+    turnLocked: false,
+    gameOver: false,
+    turnTimeLeft: TURN_TIME_LIMIT,
+    player: {
+      connection: 150, connectionMax: 150,
+      firewall: 60, firewallMax: 60,   // enemy's exploit damages this
+      power: 100, powerMax: 100,
+      cpuTier: 1, ramTier: 1,
+      cd: { exploit: 0, zeroday: 0, sustained: 0, worm: 0, logicbomb: 0, trojan: 0, decoy: 0, jam: 0, disable: 0 },
+      sustainedActive: false,
+      trojanPending: false,
+      trojanTurnsLeft: 0
+    },
+    enemy: {
+      connection: 150, connectionMax: 150,
+      firewall: 50, firewallMax: 50,   // player's exploit damages this
+      power: 100, powerMax: 100, powerRegen: 16,
+      cpuTier: 1,
+      cd: { exploit: 0, worm: 0 },
+      wormLockedTurns: 0,
+      decoyWasteNext: false
+    }
+  };
+
+  const ACTIONS = {
+    exploit:   { cost: 20, baseCd: 2, dmgFirewall: 20 },
+    zeroday:   { cost: 40, baseCd: 5, dmgFirewall: 45 },
+    sustained: { cost: 25, baseCd: 2, tickDmg: 8 },
+    worm:      { cost: 20, baseCd: 1, dmgConnection: 15 },
+    logicbomb: { cost: 35, baseCd: 3, dmgConnection: 35 },
+    trojan:    { cost: 20, baseCd: 2, detonateDmg: 55, fuseTurns: 2, exposedMultiplier: 1.5 },
+    decoy:   { cost: 15, baseCd: 2 },
+    jam:     { cost: 15, baseCd: 2 },
+    disable: { cost: 20, baseCd: 3, lockTurns: 3 },
+    enemyExploit: { cost: 20, baseCd: 2, dmgFirewall: 18 },
+    enemyWorm:    { cost: 15, baseCd: 1, dmgConnection: 12 }
+  };
+
+  const logEl = document.getElementById('log');
+  function log(text, cls) {
+    const p = document.createElement('p');
+    if (cls) p.className = cls;
+    p.textContent = '> ' + text;
+    logEl.appendChild(p);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function pct(v, max) { return Math.max(0, Math.min(100, (v / max) * 100)); }
+  function effCd(base, tier) { return Math.max(0, base - tier); }
+
+  function renderPlayer() {
+    const p = state.player;
+    const breached = p.firewall <= 0;
+    document.getElementById('playerPanel').innerHTML = `
+      <p class="label">operator</p>
+      <div class="stat-row"><span>connection</span><span>${p.connection}/${p.connectionMax}</span></div>
+      <div class="stat-row"><span>firewall</span><span>${breached ? '<span class="breached-tag">breached</span>' : p.firewall + '/' + p.firewallMax}</span></div>
+      <div class="stat-row"><span>power</span><span>${p.power}/${p.powerMax}</span></div>
+      <div class="stat-row"><span>cpu</span><span>t${p.cpuTier}</span></div>
+      <div class="stat-row"><span>ram</span><span>t${p.ramTier}</span></div>
+      ${p.sustainedActive ? `<div class="stat-row"><span>sustained</span><span style="color:var(--accent)">running (${ACTIONS.sustained.tickDmg}/turn)</span></div>` : ''}
+      ${p.trojanPending ? `<div class="stat-row"><span>trojan</span><span style="color:var(--danger)">armed — detonates in ${p.trojanTurnsLeft} · exposed</span></div>` : ''}
+    `;
+  }
+
+  function renderEnemy() {
+    const e = state.enemy;
+    const breached = e.firewall <= 0;
+    let lockLine = e.wormLockedTurns > 0 ? `<div class="stat-row"><span>worm</span><span style="color:var(--warn)">disabled (${e.wormLockedTurns})</span></div>` : '';
+    document.getElementById('enemyPanel').innerHTML = `
+      <p class="label">enemy</p>
+      <div class="stat-row"><span>connection</span><span>${e.connection}/${e.connectionMax}</span></div>
+      <div class="stat-row"><span>firewall</span><span>${breached ? '<span class="breached-tag">breached</span>' : e.firewall + '/' + e.firewallMax}</span></div>
+      <div class="stat-row"><span>power</span><span>${e.power}/${e.powerMax}</span></div>
+      <div class="stat-row"><span>cpu</span><span>t${e.cpuTier}</span></div>
+      ${lockLine}
+    `;
+  }
+
+  function renderAll() { renderPlayer(); renderEnemy(); updateButtons(); }
+
+  function updateButtons() {
+    const locked = state.turnLocked || state.gameOver;
+    const p = state.player, e = state.enemy;
+    const breached = e.firewall <= 0;
+    document.getElementById('btnAttack').disabled = locked;
+    document.getElementById('btnDefense').disabled = locked || !breached;
+    document.getElementById('btnSkip').disabled = locked;
+    document.getElementById('btnDisconnect').disabled = state.gameOver;
+  }
+
+  function clearSubmenu() {
+    const sm = document.getElementById('submenu');
+    sm.classList.remove('visible');
+    sm.innerHTML = '';
+  }
+  function makeOption(labelHtml, metaText, enabled, onClick) {
+    const b = document.createElement('button');
+    b.innerHTML = labelHtml + (metaText ? `<div class="opt-meta">${metaText}</div>` : '');
+    b.disabled = !enabled;
+    if (enabled) b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function checkGameOver() {
+    if (state.enemy.connection <= 0) { endGame(true, 'ENEMY CONNECTION SEVERED — HACK SUCCESSFUL'); return true; }
+    if (state.player.connection <= 0) { endGame(false, 'YOUR CONNECTION SEVERED — HACK FAILED'); return true; }
+    return false;
+  }
+  function endGame(win, message) {
+    state.gameOver = true;
+    const go = document.getElementById('gameover');
+    go.textContent = message;
+    go.className = 'gameover visible ' + (win ? 'win' : 'lose');
+    log(message, win ? 'good' : 'bad');
+    updateButtons();
+  }
+
+  // ---- player: attack menu — shows exploit options pre-breach, payload options post-breach ----
+  document.getElementById('btnAttack').addEventListener('click', () => {
+    clearSubmenu();
+    const sm = document.getElementById('submenu');
+    const p = state.player, e = state.enemy;
+
+    if (e.firewall > 0) {
+    // --- exploit phase: brute force / zero-day / sustained ---
+    const bruteReady = p.cd.exploit === 0 && p.power >= ACTIONS.exploit.cost;
+    sm.appendChild(makeOption('brute force', `power ${ACTIONS.exploit.cost} · cooldown ${ACTIONS.exploit.baseCd} (cpu-reduced) · reliable, repeatable firewall damage`, bruteReady, () => {
+      p.power -= ACTIONS.exploit.cost;
+      p.cd.exploit = effCd(ACTIONS.exploit.baseCd, p.cpuTier);
+      const dmg = Math.min(e.firewall, ACTIONS.exploit.dmgFirewall);
+      e.firewall -= dmg;
+      if (e.firewall <= 0) { log(`brute force lands — enemy firewall down ${dmg}, BREACHED`, 'good'); p.sustainedActive = false; }
+      else log(`brute force lands — enemy firewall down ${dmg} (${e.firewall} left)`, 'good');
+      clearSubmenu(); endPlayerAction();
+    }));
+
+    const zdReady = p.cd.zeroday === 0 && p.power >= ACTIONS.zeroday.cost;
+    sm.appendChild(makeOption('zero-day', `power ${ACTIONS.zeroday.cost} · cooldown ${ACTIONS.zeroday.baseCd} (cpu-reduced) · rare, massive one-time firewall damage`, zdReady, () => {
+      p.power -= ACTIONS.zeroday.cost;
+      p.cd.zeroday = effCd(ACTIONS.zeroday.baseCd, p.cpuTier);
+      const dmg = Math.min(e.firewall, ACTIONS.zeroday.dmgFirewall);
+      e.firewall -= dmg;
+      if (e.firewall <= 0) { log(`zero-day lands — enemy firewall shattered, BREACHED`, 'good'); p.sustainedActive = false; }
+      else log(`zero-day lands — enemy firewall down ${dmg} (${e.firewall} left)`, 'good');
+      clearSubmenu(); endPlayerAction();
+    }));
+
+    const susReady = p.cd.sustained === 0 && p.power >= ACTIONS.sustained.cost;
+    const susLabel = p.sustainedActive ? 'sustained (refresh)' : 'sustained';
+    sm.appendChild(makeOption(susLabel, `power ${ACTIONS.sustained.cost} · cooldown ${ACTIONS.sustained.baseCd} (cpu-reduced) · ticks ${ACTIONS.sustained.tickDmg} firewall dmg every turn until breached — one instance, recast refreshes rather than stacks`, susReady, () => {
+      p.power -= ACTIONS.sustained.cost;
+      p.cd.sustained = effCd(ACTIONS.sustained.baseCd, p.cpuTier);
+      p.sustainedActive = true;
+      log('sustained exploit deployed — ticking against enemy firewall each turn', 'good');
+      clearSubmenu(); endPlayerAction();
+    }));
+
+    } else {
+    // --- payload phase: worm / logic bomb / trojan ---
+    const wormReady = p.cd.worm === 0 && p.power >= ACTIONS.worm.cost;
+    sm.appendChild(makeOption('worm', `power ${ACTIONS.worm.cost} · cooldown ${ACTIONS.worm.baseCd} (cpu-reduced) · reliable, repeatable connection damage`, wormReady, () => {
+      p.power -= ACTIONS.worm.cost;
+      p.cd.worm = effCd(ACTIONS.worm.baseCd, p.cpuTier);
+      const dmg = Math.min(e.connection, ACTIONS.worm.dmgConnection);
+      e.connection -= dmg;
+      log(`worm deployed — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+      clearSubmenu(); endPlayerAction();
+    }));
+
+    const lbReady = p.cd.logicbomb === 0 && p.power >= ACTIONS.logicbomb.cost;
+    sm.appendChild(makeOption('logic bomb', `power ${ACTIONS.logicbomb.cost} · cooldown ${ACTIONS.logicbomb.baseCd} (cpu-reduced) · heavy, immediate connection damage`, lbReady, () => {
+      p.power -= ACTIONS.logicbomb.cost;
+      p.cd.logicbomb = effCd(ACTIONS.logicbomb.baseCd, p.cpuTier);
+      const dmg = Math.min(e.connection, ACTIONS.logicbomb.dmgConnection);
+      e.connection -= dmg;
+      log(`logic bomb detonates — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+      clearSubmenu(); endPlayerAction();
+    }));
+
+    const trojanReady = p.cd.trojan === 0 && p.power >= ACTIONS.trojan.cost && !p.trojanPending;
+    const trojanMeta = p.trojanPending
+      ? 'already armed'
+      : `power ${ACTIONS.trojan.cost} · cooldown ${ACTIONS.trojan.baseCd} (cpu-reduced) · plants a ${ACTIONS.trojan.fuseTurns}-turn fuse for a massive hit — you're exposed (${ACTIONS.trojan.exposedMultiplier}x incoming dmg) until it detonates`;
+    sm.appendChild(makeOption('trojan', trojanMeta, trojanReady, () => {
+      p.power -= ACTIONS.trojan.cost;
+      p.cd.trojan = effCd(ACTIONS.trojan.baseCd, p.cpuTier);
+      p.trojanPending = true;
+      p.trojanTurnsLeft = ACTIONS.trojan.fuseTurns;
+      log(`trojan planted — detonates in ${ACTIONS.trojan.fuseTurns} turns, you are exposed until then`, 'warn');
+      clearSubmenu(); endPlayerAction();
+    }));
+    }
+
+    sm.classList.add('visible');
+  });
+
+  // ---- player: defense menu (decoy / jam / disable) ----
+  document.getElementById('btnDefense').addEventListener('click', () => {
+    clearSubmenu();
+    const sm = document.getElementById('submenu');
+    const p = state.player, e = state.enemy;
+
+    const decoyReady = p.cd.decoy === 0 && p.power >= ACTIONS.decoy.cost;
+    sm.appendChild(makeOption('decoy', `power ${ACTIONS.decoy.cost} · cooldown ${ACTIONS.decoy.baseCd} (ram-reduced) · enemy wastes its next move, you get a free counter`, decoyReady, () => {
+      p.power -= ACTIONS.decoy.cost;
+      p.cd.decoy = effCd(ACTIONS.decoy.baseCd, p.ramTier);
+      e.decoyWasteNext = true;
+      log('decoy planted — enemy will waste its next move', 'good');
+      clearSubmenu(); endPlayerAction();
+    }));
+
+    const jamReady = p.cd.jam === 0 && p.power >= ACTIONS.jam.cost;
+    sm.appendChild(makeOption('jam', `power ${ACTIONS.jam.cost} · cooldown ${ACTIONS.jam.baseCd} (ram-reduced) · skips enemy's next turn — you act again immediately`, jamReady, () => {
+      p.power -= ACTIONS.jam.cost;
+      p.cd.jam = effCd(ACTIONS.jam.baseCd, p.ramTier);
+      log('jam successful — enemy turn skipped, you act again', 'good');
+      clearSubmenu();
+      creditLeftoverPower();
+      tickEnd(); // cooldowns and power still tick even though the enemy doesn't act
+    }));
+
+    const disableReady = p.cd.disable === 0 && p.power >= ACTIONS.disable.cost;
+    sm.appendChild(makeOption('disable', `power ${ACTIONS.disable.cost} · cooldown ${ACTIONS.disable.baseCd} (ram-reduced) · locks enemy's worm for ${ACTIONS.disable.lockTurns} turns`, disableReady, () => {
+      p.power -= ACTIONS.disable.cost;
+      p.cd.disable = effCd(ACTIONS.disable.baseCd, p.ramTier);
+      e.wormLockedTurns = ACTIONS.disable.lockTurns;
+      log(`disable deployed — enemy worm offline for ${ACTIONS.disable.lockTurns} turns`, 'good');
+      clearSubmenu(); endPlayerAction();
+    }));
+
+    sm.classList.add('visible');
+  });
+
+  document.getElementById('btnSkip').addEventListener('click', () => {
+    if (state.turnLocked || state.gameOver) return;
+    creditLeftoverPower();
+    clearSubmenu();
+    state.turnLocked = true;
+    renderAll();
+    updateTimerDisplay();
+    setTimeout(enemyTurn, 300);
+  });
+
+  document.getElementById('btnDisconnect').addEventListener('click', () => {
+    if (state.gameOver) return;
+    endGame(false, 'OPERATOR DISCONNECTED — RETREATED');
+  });
+
+  function creditLeftoverPower() {
+    const p = state.player;
+    const gain = Math.min(p.powerMax - p.power, state.turnTimeLeft * CONTINUOUS_POWER_PER_SEC);
+    if (gain > 0) {
+      p.power += gain;
+      log(`turn ended early — +${gain} power credited from ${state.turnTimeLeft}s remaining (${p.power}/${p.powerMax})`, 'warn');
+    }
+    state.turnTimeLeft = 0;
+  }
+
+  function endPlayerAction() {
+    creditLeftoverPower();
+    renderAll();
+    if (checkGameOver()) return;
+    state.turnLocked = true;
+    updateButtons();
+    setTimeout(enemyTurn, 500);
+  }
+
+  // ---- enemy AI: exploit + worm only, no ew ----
+  function enemyTurn() {
+    const e = state.enemy, p = state.player;
+
+    if (e.decoyWasteNext) {
+      e.decoyWasteNext = false;
+      log('enemy fell for the decoy — move wasted', 'warn');
+      if (e.firewall <= 0) {
+        const dmg = Math.min(e.connection, ACTIONS.worm.dmgConnection);
+        e.connection -= dmg;
+        log(`quick counter lands — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+      }
+      tickEnd();
+      return;
+    }
+
+    let acted = false;
+    if (p.firewall > 0 && e.cd.exploit === 0 && e.power >= ACTIONS.enemyExploit.cost) {
+      e.power -= ACTIONS.enemyExploit.cost;
+      e.cd.exploit = effCd(ACTIONS.enemyExploit.baseCd, e.cpuTier);
+      const dmg = Math.min(p.firewall, ACTIONS.enemyExploit.dmgFirewall);
+      p.firewall -= dmg;
+      if (p.firewall <= 0) log(`enemy exploit lands — your firewall down ${dmg}, BREACHED`, 'bad');
+      else log(`enemy exploit lands — your firewall down ${dmg} (${p.firewall} left)`, 'bad');
+      acted = true;
+    } else if (p.firewall <= 0 && e.wormLockedTurns === 0 && e.cd.worm === 0 && e.power >= ACTIONS.enemyWorm.cost) {
+      e.power -= ACTIONS.enemyWorm.cost;
+      e.cd.worm = effCd(ACTIONS.enemyWorm.baseCd, e.cpuTier);
+      let dmg = ACTIONS.enemyWorm.dmgConnection;
+      if (p.trojanPending) {
+        dmg = Math.round(dmg * ACTIONS.trojan.exposedMultiplier);
+        log('you are exposed — incoming damage amplified', 'warn');
+      }
+      dmg = Math.min(p.connection, dmg);
+      p.connection -= dmg;
+      log(`enemy worm lands — your connection down ${dmg} (${p.connection} left)`, 'bad');
+      acted = true;
+    }
+
+    if (!acted) log('enemy holds — insufficient resources or options', 'warn');
+    tickEnd();
+  }
+
+  function tickEnd() {
+    const p = state.player, e = state.enemy;
+    Object.keys(p.cd).forEach(k => { if (p.cd[k] > 0) p.cd[k] -= 1; });
+    Object.keys(e.cd).forEach(k => { if (e.cd[k] > 0) e.cd[k] -= 1; });
+    if (e.wormLockedTurns > 0) e.wormLockedTurns -= 1;
+    const eRegenActual = Math.min(e.powerMax - e.power, e.powerRegen);
+    e.power += eRegenActual;
+
+    if (p.sustainedActive && e.firewall > 0) {
+      const dmg = Math.min(e.firewall, ACTIONS.sustained.tickDmg);
+      e.firewall -= dmg;
+      if (e.firewall <= 0) { log(`sustained exploit ticks — enemy firewall down ${dmg}, BREACHED`, 'good'); p.sustainedActive = false; }
+      else log(`sustained exploit ticks — enemy firewall down ${dmg} (${e.firewall} left)`, 'good');
+    }
+
+    if (p.trojanPending) {
+      p.trojanTurnsLeft -= 1;
+      if (p.trojanTurnsLeft <= 0) {
+        p.trojanPending = false;
+        const dmg = Math.min(e.connection, ACTIONS.trojan.detonateDmg);
+        e.connection -= dmg;
+        log(`trojan detonates — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+      }
+    }
+
+    renderAll();
+    if (checkGameOver()) return;
+    state.turnLocked = false;
+    state.turnTimeLeft = TURN_TIME_LIMIT;
+    updateTimerDisplay();
+    updateButtons();
+  }
+
+  function updateTimerDisplay() {
+    const el = document.getElementById('turnTimerDisplay');
+    if (!state.battleStarted) { el.textContent = 'awaiting engagement'; return; }
+    if (state.gameOver) { el.textContent = ''; return; }
+    if (state.turnLocked) { el.textContent = 'enemy acting...'; return; }
+    el.textContent = `time left: ${state.turnTimeLeft}s`;
+  }
+
+  document.getElementById('btnEngage').addEventListener('click', () => {
+    state.battleStarted = true;
+    state.turnTimeLeft = TURN_TIME_LIMIT;
+    document.getElementById('engageWrap').style.display = 'none';
+    document.getElementById('actionButtonsWrap').style.display = '';
+    log('target engaged — turn timer now active', 'warn');
+    updateTimerDisplay();
+    updateButtons();
+  });
+
+  function forfeitTurn() {
+    if (state.turnLocked || state.gameOver) return;
+    creditLeftoverPower();
+    log('turn timed out — no action taken', 'warn');
+    clearSubmenu();
+    state.turnLocked = true;
+    updateTimerDisplay();
+    updateButtons();
+    setTimeout(enemyTurn, 300);
+  }
+
+  setInterval(() => {
+    if (!state.battleStarted || state.gameOver) return;
+
+    // power regenerates continuously, regardless of whose turn it is
+    const gain = Math.min(state.player.powerMax - state.player.power, CONTINUOUS_POWER_PER_SEC);
+    if (gain > 0) {
+      state.player.power += gain;
+      renderPlayer();
+    }
+
+    // turn countdown only runs while it's the player's turn to choose
+    if (!state.turnLocked) {
+      state.turnTimeLeft -= 1;
+      updateTimerDisplay();
+      if (state.turnTimeLeft <= 0) forfeitTurn();
+    }
+  }, 1000);
+
+  log('interface online — exploit the firewall, then deploy payload', 'warn');
+  log('connection established — enemy firewall intact');
+  renderAll();
+  updateTimerDisplay();
+</script>
+
+</body>
+</html>
+```
+
+**battle-sample.html**
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Battle Sample</title>
+<style>
+  :root {
+    --bg: #0a0d0a;
+    --panel: #10140f;
+    --line: #1f2b1c;
+    --line-hover: #3f6b3a;
+    --text: #c8e6c0;
+    --text-dim: #5f7a58;
+    --text-faint: #3a4a36;
+    --accent: #5ee08a;
+    --danger: #e0665e;
+    --warn: #e0c65e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', ui-monospace, monospace;
+  }
+  body {
+    padding: 14px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .note {
+    max-width: 900px;
+    margin: 0 auto 10px;
+    font-size: 10px;
+    color: var(--text-faint);
+    text-align: center;
+  }
+  .board {
+    max-width: 900px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 12px;
+  }
+  .label {
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    color: var(--text-dim);
+    margin: 0 0 8px;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 1px 0;
+  }
+  .stat-row span:first-child { color: var(--text-dim); }
+  .stat-row .hidden-val { color: var(--text-faint); }
+  .bar {
+    height: 4px;
+    background: var(--line);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 2px 0 4px;
+  }
+  .bar > div { height: 100%; background: var(--accent); }
+  .bar.shield > div { background: var(--warn); }
+  .bar.armor > div { background: #8fb0e8; }
+
+  .log {
+    max-width: 900px;
+    margin: 8px auto;
+    height: 130px;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.6;
+  }
+  .log p { margin: 0; color: var(--text-dim); }
+  .log p.you { color: var(--text); }
+  .log p.warn { color: var(--warn); }
+  .log p.bad { color: var(--danger); }
+  .log p.good { color: var(--accent); }
+  .log p.lore { color: var(--text-faint); font-style: italic; }
+
+  .actions {
+    max-width: 900px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  button {
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 4px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button.disconnect:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+  button:disabled { color: var(--text-faint); border-color: var(--line); cursor: not-allowed; opacity: 0.5; }
+
+  .submenu {
+    max-width: 900px;
+    margin: 8px auto 0;
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .submenu.visible { display: flex; }
+  .submenu button { text-align: left; padding: 8px 10px; }
+  .submenu .opt-meta { color: var(--text-faint); font-size: 10px; }
+
+  .gameover {
+    max-width: 900px;
+    margin: 10px auto 0;
+    text-align: center;
+    font-size: 13px;
+    padding: 10px;
+    display: none;
+  }
+  .gameover.visible { display: block; }
+  .gameover.win { color: var(--accent); }
+  .gameover.lose { color: var(--danger); }
+
+  @media (max-width: 600px) {
+    .board { grid-template-columns: 1fr; }
+    .actions { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<p class="note">sample balance values — not final numbers. range is omitted from this slice.</p>
+
+<div class="board">
+  <div class="panel" id="playerPanel">
+    <p class="label">operator</p>
+  </div>
+  <div class="panel" id="enemyPanel">
+    <p class="label">enemy</p>
+  </div>
+</div>
+
+<div class="panel log" id="log"></div>
+
+<div class="actions">
+  <button id="btnAttack">attack</button>
+  <button id="btnScan">scan</button>
+  <button id="btnEw">ew</button>
+  <button class="disconnect" id="btnDisconnect">disconnect</button>
+</div>
+
+<div class="submenu" id="submenu"></div>
+
+<div class="gameover" id="gameover"></div>
+
+<script>
+  const WEAPONS = {
+    plasma:   { name: 'Plasma',   dmg: 40, drain: 30, cooldown: 3, canShield: true,  canArmor: true  },
+    laser:    { name: 'Laser',    dmg: 25, drain: 15, cooldown: 1, canShield: false, canArmor: true  },
+    missiles: { name: 'Missiles', dmg: 15, drain: 5,  cooldown: 0, canShield: false, canArmor: false }
+  };
+
+  const state = {
+    turnLocked: false,
+    gameOver: false,
+    player: {
+      hp: 200, hpMax: 200,
+      armor: 80, armorMax: 80,
+      shield: 60, shieldMax: 60,
+      power: 100, powerMax: 100,
+      connection: 'strong',
+      firewallTier: 2,
+      processingTier: 1, // doubles as EW tier
+      scanTier: 1,
+      cd: { plasma: 0, laser: 0, missiles: 0, scan: 0, jam: 0, breach: 0, emp: 0, drain: 0, corrupt: 0 }
+    },
+    enemy: {
+      hp: 220, hpMax: 220,
+      armor: 70, armorMax: 70,
+      shield: 50, shieldMax: 50,
+      power: 70, powerMax: 70,
+      connection: 'moderate',
+      firewallTier: 1,
+      processingTier: 1,
+      cd: { plasma: 0, laser: 0, missiles: 0 },
+      breached: false,
+      breachTurnsLeft: 0,
+      skipNextTurn: false,
+      revealed: { connection: false, hp: false, armor: false, shield: false, power: false, processing: false, firewall: false }
+    }
+  };
+
+  const logEl = document.getElementById('log');
+  function log(text, cls) {
+    const p = document.createElement('p');
+    if (cls) p.className = cls;
+    p.textContent = '> ' + text;
+    logEl.appendChild(p);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function pct(v, max) { return Math.max(0, Math.min(100, (v / max) * 100)); }
+
+  function renderPlayer() {
+    const p = state.player;
+    const el = document.getElementById('playerPanel');
+    el.innerHTML = `
+      <p class="label">operator</p>
+      <div class="stat-row"><span>hp</span><span>${p.hp}/${p.hpMax}</span></div>
+      <div class="bar"><div style="width:${pct(p.hp,p.hpMax)}%"></div></div>
+      <div class="stat-row"><span>armor</span><span>${p.armor}/${p.armorMax}</span></div>
+      <div class="bar armor"><div style="width:${pct(p.armor,p.armorMax)}%"></div></div>
+      <div class="stat-row"><span>shield</span><span>${p.shield}/${p.shieldMax}</span></div>
+      <div class="bar shield"><div style="width:${pct(p.shield,p.shieldMax)}%"></div></div>
+      <div class="stat-row"><span>power</span><span>${p.power}/${p.powerMax}</span></div>
+      <div class="stat-row"><span>connection</span><span>${p.connection}</span></div>
+      <div class="stat-row"><span>firewall</span><span>t${p.firewallTier}</span></div>
+      <div class="stat-row"><span>processing</span><span>t${p.processingTier}</span></div>
+      <div class="stat-row"><span>scan</span><span>t${p.scanTier}</span></div>
+    `;
+  }
+
+  function renderEnemy() {
+    const e = state.enemy;
+    const r = e.revealed;
+    const val = (flag, v) => flag ? v : '<span class="hidden-val">???</span>';
+    const el = document.getElementById('enemyPanel');
+    let breachLine = e.breached ? `<div class="stat-row"><span>firewall status</span><span style="color:var(--warn)">breached (${e.breachTurnsLeft})</span></div>` : '';
+    el.innerHTML = `
+      <p class="label">enemy</p>
+      <div class="stat-row"><span>hp</span><span>${val(r.hp, e.hp + '/' + e.hpMax)}</span></div>
+      ${r.hp ? `<div class="bar"><div style="width:${pct(e.hp,e.hpMax)}%"></div></div>` : ''}
+      <div class="stat-row"><span>armor</span><span>${val(r.armor, e.armor + '/' + e.armorMax)}</span></div>
+      ${r.armor ? `<div class="bar armor"><div style="width:${pct(e.armor,e.armorMax)}%"></div></div>` : ''}
+      <div class="stat-row"><span>shield</span><span>${val(r.shield, e.shield + '/' + e.shieldMax)}</span></div>
+      ${r.shield ? `<div class="bar shield"><div style="width:${pct(e.shield,e.shieldMax)}%"></div></div>` : ''}
+      <div class="stat-row"><span>power</span><span>${val(r.power, e.power + '/' + e.powerMax)}</span></div>
+      <div class="stat-row"><span>connection</span><span>${val(r.connection, e.connection)}</span></div>
+      <div class="stat-row"><span>firewall</span><span>${val(r.firewall, 't' + e.firewallTier)}</span></div>
+      <div class="stat-row"><span>processing</span><span>${val(r.processing, 't' + e.processingTier)}</span></div>
+      ${breachLine}
+    `;
+  }
+
+  function renderAll() { renderPlayer(); renderEnemy(); updateButtons(); }
+
+  function updateButtons() {
+    const locked = state.turnLocked || state.gameOver;
+    document.getElementById('btnAttack').disabled = locked;
+    document.getElementById('btnScan').disabled = locked;
+    document.getElementById('btnEw').disabled = locked;
+    document.getElementById('btnDisconnect').disabled = state.gameOver;
+  }
+
+  function clearSubmenu() {
+    const sm = document.getElementById('submenu');
+    sm.classList.remove('visible');
+    sm.innerHTML = '';
+  }
+
+  function makeOption(labelHtml, metaText, enabled, onClick) {
+    const b = document.createElement('button');
+    b.innerHTML = labelHtml + (metaText ? `<div class="opt-meta">${metaText}</div>` : '');
+    b.disabled = !enabled;
+    if (enabled) b.addEventListener('click', onClick);
+    return b;
+  }
+
+  // ---- resolution helpers ----
+  function resolveWeaponHit(attackerLabel, weaponKey, target, targetLabel) {
+    const w = WEAPONS[weaponKey];
+    if (target.shield > 0) {
+      if (w.canShield) {
+        const dmg = Math.min(target.shield, w.dmg);
+        target.shield -= dmg;
+        log(`${attackerLabel} fired ${w.name} — ${targetLabel} shield down ${dmg} (${target.shield} left)`, 'good');
+      } else {
+        log(`${attackerLabel} fired ${w.name} — blocked by ${targetLabel} shield`, 'bad');
+      }
+    } else if (target.armor > 0) {
+      if (w.canArmor) {
+        const dmg = Math.min(target.armor, w.dmg);
+        target.armor -= dmg;
+        log(`${attackerLabel} fired ${w.name} — ${targetLabel} armor down ${dmg} (${target.armor} left)`, 'good');
+      } else {
+        log(`${attackerLabel} fired ${w.name} — blocked, ${targetLabel} armor unaffected`, 'bad');
+      }
+    } else {
+      const dmg = Math.min(target.hp, w.dmg);
+      target.hp -= dmg;
+      log(`${attackerLabel} fired ${w.name} — ${targetLabel} HP down ${dmg} (${target.hp} left)`, 'good');
+    }
+  }
+
+  function checkGameOver() {
+    if (state.enemy.hp <= 0) {
+      endGame(true, 'ENEMY NEUTRALIZED — HACK SUCCESSFUL');
+      return true;
+    }
+    if (state.player.hp <= 0) {
+      endGame(false, 'CONNECTION TERMINATED — HACK FAILED');
+      return true;
+    }
+    return false;
+  }
+
+  function endGame(win, message) {
+    state.gameOver = true;
+    const go = document.getElementById('gameover');
+    go.textContent = message;
+    go.className = 'gameover visible ' + (win ? 'win' : 'lose');
+    log(message, win ? 'good' : 'bad');
+    updateButtons();
+  }
+
+  // ---- player actions ----
+  function openAttackMenu() {
+    clearSubmenu();
+    const sm = document.getElementById('submenu');
+    sm.classList.add('visible');
+    Object.keys(WEAPONS).forEach(key => {
+      const w = WEAPONS[key];
+      const cdReady = state.player.cd[key] === 0;
+      const canAfford = state.player.power >= w.drain;
+      const enabled = cdReady && canAfford;
+      let meta = `dmg ${w.dmg} · drain ${w.drain} · cooldown ${w.cooldown}`;
+      if (!cdReady) meta += ` · on cooldown (${state.player.cd[key]})`;
+      if (!canAfford) meta += ' · insufficient power';
+      sm.appendChild(makeOption(w.name.toLowerCase(), meta, enabled, () => {
+        state.player.power -= w.drain;
+        state.player.cd[key] = w.cooldown;
+        resolveWeaponHit('operator', key, state.enemy, 'enemy');
+        clearSubmenu();
+        endPlayerAction();
+      }));
+    });
+  }
+
+  function openScanMenu() {
+    clearSubmenu();
+    const sm = document.getElementById('submenu');
+    sm.classList.add('visible');
+    const cdReady = state.player.cd.scan === 0;
+    const cost = 10;
+    const canAfford = state.player.power >= cost;
+    const enabled = cdReady && canAfford;
+    let meta = `power ${cost} · cooldown 2`;
+    if (!cdReady) meta += ` · on cooldown (${state.player.cd.scan})`;
+    if (!canAfford) meta += ' · insufficient power';
+    sm.appendChild(makeOption(`run scan (tier ${state.player.scanTier})`, meta, enabled, () => {
+      state.player.power -= cost;
+      state.player.cd.scan = 2;
+      const e = state.enemy;
+      const baseline = state.player.scanTier >= e.firewallTier;
+      if (baseline) {
+        e.revealed.connection = true;
+        e.revealed.hp = true;
+        e.revealed.armor = true;
+        e.revealed.shield = true;
+        log('scan complete — connection, hp, armor, shield revealed', 'good');
+      } else {
+        log('scan complete — firewall held most of it back', 'warn');
+      }
+      if (state.player.scanTier >= e.firewallTier + 1) {
+        e.revealed.power = true;
+        e.revealed.processing = true;
+        log('scan tier exceeds firewall — power and processing also revealed', 'good');
+      }
+      if (e.breached) {
+        e.revealed.connection = e.revealed.hp = e.revealed.armor = e.revealed.shield = e.revealed.power = e.revealed.processing = true;
+        log('firewall breached — full telemetry visible', 'good');
+      }
+      clearSubmenu();
+      endPlayerAction();
+    }));
+  }
+
+  function openEwMenu() {
+    clearSubmenu();
+    const sm = document.getElementById('submenu');
+    sm.classList.add('visible');
+    const p = state.player, e = state.enemy;
+
+    // Wave 1
+    const jamReady = p.cd.jam === 0;
+    const jamAfford = p.power >= 15;
+    sm.appendChild(makeOption('jam connection', `power 15 · cooldown 2 · needs EW tier ${p.processingTier} ≥ firewall`, jamReady && jamAfford, () => {
+      p.power -= 15; p.cd.jam = 2;
+      const success = p.processingTier >= e.firewallTier;
+      if (success) { log('jam successful — enemy connection degraded', 'good'); }
+      else { log('jam failed — firewall held', 'bad'); }
+      clearSubmenu(); endPlayerAction();
+    }));
+
+    const breachReady = p.cd.breach === 0;
+    const breachAfford = p.power >= 20;
+    sm.appendChild(makeOption('breach firewall', `power 20 · cooldown 3 · needs EW tier ${p.processingTier} ≥ firewall`, breachReady && breachAfford, () => {
+      p.power -= 20; p.cd.breach = 3;
+      e.revealed.firewall = true;
+      const success = p.processingTier >= e.firewallTier;
+      if (success) {
+        e.breached = true;
+        e.breachTurnsLeft = 3;
+        log('firewall breach successful — wave 2 options unlocked', 'good');
+      } else {
+        log('breach attempt failed — firewall too strong', 'bad');
+      }
+      clearSubmenu(); endPlayerAction();
+    }));
+
+    // Wave 2 — only if breached
+    if (e.breached) {
+      const empReady = p.cd.emp === 0;
+      const empAfford = p.power >= 25;
+      sm.appendChild(makeOption('emp', `power 25 · cooldown 2 · targets shield, cascades if shield is already down`, empReady && empAfford, () => {
+        p.power -= 25; p.cd.emp = 2;
+        if (e.shield > 0) {
+          const dmg = Math.min(e.shield, 30);
+          e.shield -= dmg;
+          log(`emp discharged — enemy shield down ${dmg} (${e.shield} left)`, 'good');
+        } else {
+          e.power = 0;
+          e.breachTurnsLeft += 2;
+          log('emp cascade — shield already down, enemy power knocked out and breach window extended', 'good');
+        }
+        clearSubmenu(); endPlayerAction();
+      }));
+
+      const drainReady = p.cd.drain === 0;
+      const drainAfford = p.power >= 20;
+      sm.appendChild(makeOption('power drain', `power 20 · cooldown 2 · drains enemy power pool`, drainReady && drainAfford, () => {
+        p.power -= 20; p.cd.drain = 2;
+        const dmg = Math.min(e.power, 40);
+        e.power -= dmg;
+        log(`power drain — enemy power down ${dmg} (${e.power} left)`, 'good');
+        clearSubmenu(); endPlayerAction();
+      }));
+
+      const corruptReady = p.cd.corrupt === 0;
+      const corruptAfford = p.power >= 20;
+      sm.appendChild(makeOption('corruption', `power 20 · cooldown 3 · disrupts enemy's next action`, corruptReady && corruptAfford, () => {
+        p.power -= 20; p.cd.corrupt = 3;
+        e.skipNextTurn = true;
+        log('corruption injected — enemy process destabilized', 'good');
+        clearSubmenu(); endPlayerAction();
+      }));
+    }
+
+    sm.classList.add('visible');
+  }
+
+  document.getElementById('btnAttack').addEventListener('click', openAttackMenu);
+  document.getElementById('btnScan').addEventListener('click', openScanMenu);
+  document.getElementById('btnEw').addEventListener('click', openEwMenu);
+  document.getElementById('btnDisconnect').addEventListener('click', () => {
+    if (state.gameOver) return;
+    endGame(false, 'OPERATOR DISCONNECTED — RETREATED');
+  });
+
+  function endPlayerAction() {
+    renderAll();
+    if (checkGameOver()) return;
+    state.turnLocked = true;
+    updateButtons();
+    setTimeout(enemyTurn, 500);
+  }
+
+  // ---- enemy AI ----
+  function enemyTurn() {
+    const e = state.enemy, p = state.player;
+
+    if (e.skipNextTurn) {
+      e.skipNextTurn = false;
+      log('enemy process still recovering — no action taken', 'warn');
+      tickEnd();
+      return;
+    }
+
+    if (e.breached) {
+      e.breachTurnsLeft -= 1;
+      const tryRestore = e.breachTurnsLeft <= 0 || Math.random() < 0.3;
+      if (tryRestore) {
+        e.breached = false;
+        e.breachTurnsLeft = 0;
+        log('enemy firewall back online', 'warn');
+        tickEnd();
+        return;
+      }
+    }
+
+    // pick a usable weapon: prefer one that can currently touch the player's exposed layer
+    const targetLayer = p.shield > 0 ? 'shield' : (p.armor > 0 ? 'armor' : 'hp');
+    const order = targetLayer === 'shield' ? ['plasma', 'laser', 'missiles']
+                : targetLayer === 'armor'  ? ['laser', 'plasma', 'missiles']
+                : ['missiles', 'laser', 'plasma'];
+
+    let chosen = null;
+    for (const key of order) {
+      const w = WEAPONS[key];
+      if (e.cd[key] === 0 && e.power >= w.drain) { chosen = key; break; }
+    }
+
+    if (chosen) {
+      const w = WEAPONS[chosen];
+      e.power -= w.drain;
+      e.cd[chosen] = w.cooldown;
+      resolveWeaponHit('enemy', chosen, p, 'operator');
+    } else {
+      log('enemy holds — insufficient resources to act', 'warn');
+    }
+
+    tickEnd();
+  }
+
+  function tickEnd() {
+    const p = state.player, e = state.enemy;
+    Object.keys(p.cd).forEach(k => { if (p.cd[k] > 0) p.cd[k] -= 1; });
+    Object.keys(e.cd).forEach(k => { if (e.cd[k] > 0) e.cd[k] -= 1; });
+    p.power = Math.min(p.powerMax, p.power + 15);
+    e.power = Math.min(e.powerMax, e.power + 10);
+
+    renderAll();
+    if (checkGameOver()) return;
+    state.turnLocked = false;
+    updateButtons();
+  }
+
+  // ---- init ----
+  log('interface online — raw exchange rendered as combat for operator legibility', 'lore');
+  log('connection established');
+  log('enemy detected — defenses unknown, run scan to begin');
+  renderAll();
+</script>
+
+</body>
+</html>
+```
+
+**battle-screen.html**
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Battle Screen</title>
+<style>
+  :root {
+    --bg: #0a0d0a;
+    --panel: #10140f;
+    --line: #1f2b1c;
+    --line-hover: #3f6b3a;
+    --line-selected: #5ee08a;
+    --line-target: #e0c65e;
+    --text: #c8e6c0;
+    --text-dim: #5f7a58;
+    --text-faint: #3a4a36;
+    --accent: #5ee08a;
+    --target-accent: #e0c65e;
+    --danger: #e0665e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', ui-monospace, monospace;
+  }
+  body {
+    padding: 14px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .board {
+    max-width: 1000px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1.3fr 1fr 1fr 1.3fr;
+    gap: 8px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 12px;
+  }
+  .col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .label {
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    color: var(--text-dim);
+    margin: 0 0 8px;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 1px 0;
+  }
+  .stat-row span:first-child { color: var(--text-dim); }
+  .unit-block { padding: 8px 10px; }
+  .unit-name { font-size: 11px; margin: 0 0 5px; color: var(--text); }
+  .unit-block .stat-row { font-size: 10px; }
+  .unit-unknown {
+    color: var(--text-faint);
+    font-size: 11px;
+    min-height: 96px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* selectable states: operator + own units only */
+  .selectable {
+    cursor: pointer;
+    transition: border-color 120ms ease, border-width 120ms ease, opacity 120ms ease;
+    border-width: 1px;
+  }
+  .selectable:hover {
+    border-color: var(--line-hover);
+  }
+  .selectable.is-selected {
+    border-color: var(--line-selected);
+    border-width: 2px;
+    padding: 9px 11px; /* compensate for thicker border so content doesn't shift */
+  }
+  .unit-block.selectable.is-selected { padding: 7px 9px; }
+
+  .selectable.is-cooldown {
+    cursor: not-allowed;
+    opacity: 0.45;
+    pointer-events: none;
+  }
+
+  /* targetable enemy blocks, active only once an order needs a target */
+  .targetable {
+    cursor: pointer;
+    transition: border-color 120ms ease, border-width 120ms ease;
+    border-width: 1px;
+  }
+  .targetable:hover {
+    border-color: var(--line-target);
+  }
+  .targetable.is-armed {
+    border-color: var(--line-target);
+  }
+
+  .log {
+    flex: 1;
+    min-height: 120px;
+    overflow: hidden;
+    font-size: 11px;
+    line-height: 1.7;
+  }
+  .log p { margin: 0; color: var(--text-dim); }
+  .log p.pending { color: var(--text); }
+
+  .action-panel {
+    flex: 1;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .action-panel .hint {
+    color: var(--text-faint);
+    font-size: 10px;
+    text-align: center;
+  }
+  .action-panel .option-list {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .action-panel .option-list.visible { display: flex; }
+  .action-panel .option-list button {
+    text-align: left;
+    padding: 6px 8px;
+  }
+
+  .actions {
+    max-width: 1000px;
+    margin: 10px auto 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  button {
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 0;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.disconnect:hover { border-color: var(--danger); color: var(--danger); }
+  button:disabled {
+    color: var(--text-faint);
+    border-color: var(--line);
+    cursor: not-allowed;
+  }
+
+  @media (max-width: 720px) {
+    .board { grid-template-columns: 1fr 1fr; }
+    .actions { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+  <div class="board">
+
+    <!-- OPERATOR -->
+    <div class="col">
+      <div class="panel selectable" data-actor="operator" data-name="operator">
+        <p class="label">operator</p>
+        <div class="stat-row"><span>hp</span><span>420</span></div>
+        <div class="stat-row"><span>armor</span><span>150</span></div>
+        <div class="stat-row"><span>shield</span><span>80</span></div>
+        <div class="stat-row"><span>power</span><span>60</span></div>
+        <div class="stat-row"><span>connection</span><span>strong</span></div>
+        <div class="stat-row"><span>firewall</span><span>t2</span></div>
+        <div class="stat-row"><span>processing</span><span>t1</span></div>
+        <div class="stat-row"><span>scan</span><span>t1</span></div>
+      </div>
+      <div class="panel log" id="logPanel">
+        <p class="label" style="margin-bottom:6px;">log</p>
+        <p>&gt; connection established</p>
+        <p>&gt; operator scanned enemy</p>
+        <p>&gt; firewall breach attempt t1 vs t3 — fail</p>
+        <p>&gt; operator fired laser — miss</p>
+        <p>&gt; unit 02 blocked incoming hit</p>
+        <p class="pending" id="logPending">&gt; awaiting action</p>
+      </div>
+    </div>
+
+    <!-- OPERATOR UNITS -->
+    <div class="col">
+      <div class="panel unit-block selectable" data-actor="unit1" data-name="unit 01 — attacker">
+        <p class="unit-name">unit 01 — attacker</p>
+        <div class="stat-row"><span>hp</span><span>120</span></div>
+        <div class="stat-row"><span>armor</span><span>40</span></div>
+        <div class="stat-row"><span>shield</span><span>0</span></div>
+        <div class="stat-row"><span>power</span><span>20</span></div>
+        <div class="stat-row"><span>connection</span><span>mod</span></div>
+        <div class="stat-row"><span>firewall</span><span>t1</span></div>
+        <div class="stat-row"><span>processing</span><span>t1</span></div>
+        <div class="stat-row"><span>scan</span><span>-</span></div>
+      </div>
+      <div class="panel unit-block selectable" data-actor="unit2" data-name="unit 02 — blocker">
+        <p class="unit-name">unit 02 — blocker</p>
+        <div class="stat-row"><span>hp</span><span>200</span></div>
+        <div class="stat-row"><span>armor</span><span>100</span></div>
+        <div class="stat-row"><span>shield</span><span>60</span></div>
+        <div class="stat-row"><span>power</span><span>30</span></div>
+        <div class="stat-row"><span>connection</span><span>strong</span></div>
+        <div class="stat-row"><span>firewall</span><span>t2</span></div>
+        <div class="stat-row"><span>processing</span><span>t1</span></div>
+        <div class="stat-row"><span>scan</span><span>-</span></div>
+      </div>
+      <div class="panel unit-block selectable" data-actor="unit3" data-name="unit 03 — healer">
+        <p class="unit-name">unit 03 — healer</p>
+        <div class="stat-row"><span>hp</span><span>90</span></div>
+        <div class="stat-row"><span>armor</span><span>20</span></div>
+        <div class="stat-row"><span>shield</span><span>0</span></div>
+        <div class="stat-row"><span>power</span><span>25</span></div>
+        <div class="stat-row"><span>connection</span><span>mod</span></div>
+        <div class="stat-row"><span>firewall</span><span>t1</span></div>
+        <div class="stat-row"><span>processing</span><span>t1</span></div>
+        <div class="stat-row"><span>scan</span><span>-</span></div>
+      </div>
+      <div class="panel unit-block selectable" data-actor="unit4" data-name="unit 04 — support">
+        <p class="unit-name">unit 04 — support</p>
+        <div class="stat-row"><span>hp</span><span>90</span></div>
+        <div class="stat-row"><span>armor</span><span>20</span></div>
+        <div class="stat-row"><span>shield</span><span>20</span></div>
+        <div class="stat-row"><span>power</span><span>25</span></div>
+        <div class="stat-row"><span>connection</span><span>mod</span></div>
+        <div class="stat-row"><span>firewall</span><span>t1</span></div>
+        <div class="stat-row"><span>processing</span><span>t1</span></div>
+        <div class="stat-row"><span>scan</span><span>-</span></div>
+      </div>
+    </div>
+
+    <!-- ENEMY UNITS -->
+    <div class="col">
+      <div class="panel unit-unknown" data-target="enemy-unit1" data-target-name="enemy unit 01">enemy unit 01 — unknown</div>
+      <div class="panel unit-unknown" data-target="enemy-unit2" data-target-name="enemy unit 02">enemy unit 02 — unknown</div>
+      <div class="panel unit-unknown" data-target="enemy-unit3" data-target-name="enemy unit 03">enemy unit 03 — unknown</div>
+      <div class="panel unit-unknown" data-target="enemy-unit4" data-target-name="enemy unit 04">enemy unit 04 — unknown</div>
+    </div>
+
+    <!-- ENEMY + CONTEXTUAL ACTION PANEL -->
+    <div class="col">
+      <div class="panel" data-target="enemy" data-target-name="enemy">
+        <p class="label">enemy</p>
+        <p style="font-size:11px; color: var(--text-faint); margin:0;">no data — run scan</p>
+      </div>
+      <div class="panel action-panel" id="actionPanel">
+        <p class="hint" id="actionHint">select operator or a unit</p>
+        <div class="option-list" id="optionList"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="actions">
+    <button id="btnAttack" disabled>attack</button>
+    <button id="btnScan" disabled>scan</button>
+    <button id="btnEw" disabled>ew</button>
+    <button class="disconnect">disconnect</button>
+  </div>
+
+  <script>
+    const selectables = Array.from(document.querySelectorAll('.selectable'));
+    const targetables = Array.from(document.querySelectorAll('[data-target]'));
+    const hint = document.getElementById('actionHint');
+    const optionList = document.getElementById('optionList');
+    const btnAttack = document.getElementById('btnAttack');
+    const btnScan = document.getElementById('btnScan');
+    const btnEw = document.getElementById('btnEw');
+    const logPanel = document.getElementById('logPanel');
+    const logPending = document.getElementById('logPending');
+
+    let selected = null;      // currently selected actor element
+    let pendingAction = null; // { kind, label } once an option is chosen, awaiting a target
+
+    function addLog(text) {
+      const p = document.createElement('p');
+      p.textContent = '> ' + text;
+      logPanel.insertBefore(p, logPending);
+    }
+
+    function resetIdle() {
+      selected = null;
+      pendingAction = null;
+      selectables.forEach(o => o.classList.remove('is-selected'));
+      targetables.forEach(o => o.classList.remove('is-armed'));
+      btnAttack.disabled = true;
+      btnScan.disabled = true;
+      btnEw.disabled = true;
+      hint.style.display = 'block';
+      hint.textContent = 'select operator or a unit';
+      optionList.classList.remove('visible');
+      optionList.innerHTML = '';
+    }
+
+    function armTargets(actionLabel) {
+      pendingAction = actionLabel;
+      targetables.forEach(o => o.classList.add('is-armed'));
+      hint.style.display = 'block';
+      hint.textContent = 'select a target for ' + actionLabel;
+      optionList.classList.remove('visible');
+      optionList.innerHTML = '';
+    }
+
+    selectables.forEach(el => {
+      el.addEventListener('click', () => {
+        if (el.classList.contains('is-cooldown')) return;
+        const isSame = selected === el;
+        selectables.forEach(o => o.classList.remove('is-selected'));
+        targetables.forEach(o => o.classList.remove('is-armed'));
+        pendingAction = null;
+
+        if (isSame) {
+          resetIdle();
+          return;
+        }
+
+        el.classList.add('is-selected');
+        selected = el;
+        hint.style.display = 'block';
+        hint.textContent = el.dataset.name + ' selected — choose an action below';
+        optionList.classList.remove('visible');
+        optionList.innerHTML = '';
+
+        const isOperator = el.dataset.actor === 'operator';
+        btnAttack.disabled = false;
+        btnScan.disabled = !isOperator;
+        btnEw.disabled = !isOperator;
+      });
+    });
+
+    const optionsFor = {
+      attack: ['plasma — short range', 'laser — medium range', 'missiles — long range'],
+      scan: ['run scan (tier 1)'],
+      ew: ['jam connection', 'breach firewall']
+    };
+
+    function showOptions(kind) {
+      if (!selected) return;
+      hint.style.display = 'none';
+      optionList.innerHTML = '';
+      optionsFor[kind].forEach(label => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.addEventListener('click', () => armTargets(label));
+        optionList.appendChild(b);
+      });
+      optionList.classList.add('visible');
+    }
+
+    btnAttack.addEventListener('click', () => showOptions('attack'));
+    btnScan.addEventListener('click', () => showOptions('scan'));
+    btnEw.addEventListener('click', () => showOptions('ew'));
+
+    targetables.forEach(t => {
+      t.addEventListener('click', () => {
+        if (!pendingAction || !selected) return;
+        const actorName = selected.dataset.name;
+        const actorEl = selected;
+        const isUnit = actorEl.dataset.actor !== 'operator';
+
+        addLog(actorName + ' used ' + pendingAction + ' on ' + t.dataset.targetName);
+
+        if (isUnit) {
+          actorEl.classList.add('is-cooldown');
+          actorEl.classList.remove('is-selected');
+          addLog(actorName + ' not responding');
+          setTimeout(() => {
+            actorEl.classList.remove('is-cooldown');
+            addLog(actorName + ' back online');
+          }, 6000);
+        }
+
+        resetIdle();
+      });
+    });
+  </script>
+
+</body>
+</html>
+```
+
+# Part 2: The project report
+
+```markdown
+# CLAUDE.md — Tactical Hacking Game ("Operator")
+
+Read section 0 first. It explains how this user works, and it matters as much as the design notes.
+
+## 0. How to work with this user (David)
+
+- David is the designer. You are the programmer and design-consistency checker. Design decisions are his.
+- Do NOT invent mechanics, buttons or "fixes" he didn't ask for. This went wrong once: a "Recharge" button was added unprompted and he made it be reverted. Propose, wait for a yes, then build.
+- When he writes "thoughts?" he wants discussion only. No code changes.
+- Numbers in the code are PLACEHOLDERS. He said "do whatever values for now so I can see how it works." Pick sensible values and say they're placeholders.
+- Work incrementally: simplest version first, add one thing at a time, play it, refine. Say out loud every simplification you make.
+- Show numbers, never progress bars. Readiness is a rising percentage in plain text. No bars or gauges in the matrix UI.
+- Before building, check new ideas against locked rules and point out contradictions. He values this a lot. When he is confused, concrete worked examples with real numbers help.
+- Keep explanations short and plain. He gets overwhelmed when things stack up.
+- He prefers the finished result delivered directly once direction is clear. Ask only when there is a real fork in design.
+- Real hacking and real EW (electronic warfare) terminology is the preferred source of names and mechanics. He liked grounding choices in how actual intrusions work.
+
+## 1. What the game is
+
+A single-player, text-only, terminal-styled hacking game. The player is an "Operator" who jacks into a matrix and hacks nodes owned by a company. The fight IS the hack. You breach the enemy's Firewall, then drain their Connection with payloads, while they do the same to you. There is no map and no grid in combat or exploration. Everything is dense, live-updating text blocks (green on black, monospace). The goal is a screen that looks like chaos to an outsider but is fully legible to the player. Complexity should appear gradually as the player progresses.
+
+Lore framing: the Operator's interface renders raw code-level exchange as combat for human legibility. This is flavor only. No mechanics depend on it.
+
+Art rules: the matrix (combat and exploration) is text only. The Hub is "outside the matrix" and may use real art (pixel-art shopkeeper portrait, item images).
+
+Narrative premise (linear, scripted, NOT written yet): three acts. Defender (you are a recruit protecting a company's nodes) -> Discovery (you learn the company is bad) -> Defector (you turn on it). Story is delivered only outside the matrix: at the Hub through the shopkeeper in a fixed sequence (not reactive to exploration order), plus major reveals after boss fights. In the matrix there are only subtle clues. New Game starts with a tutorial: the shopkeeper explains how to play while opening the story (you're a recruit). Non-attackable nodes in Act 1 are the company's protected infrastructure, which become attackable after the turn. Cleared sectors may later host hostile nodes after the reveal, so a sector's "cleared" tag must be able to change again.
+
+## 2. Screens and navigation
+
+Intro (New Game / Continue / Quit) -> Hub (Shopkeeper / Manage Equipment / Enter Matrix / Quit) -> Sector Select -> Coordinate List -> scan a coordinate -> Engage (hostile only) -> Combat -> back to Coordinate List.
+
+- Back buttons return to the previously visited screen (a navigation history stack), NOT a fixed parent. Implemented with screenHistory / goBack().
+- Hub Quit returns to Intro; Intro Quit exits to a completely blank screen. Both ask for confirmation (overlay with confirm/cancel).
+- Continue is shown but disabled (no saves exist yet).
+- Sector Select shows a per-sector "cleared" tag. Coordinates are text like 12.04.11, a fixed finite number per sector, start unknown, and are revealed by scanning. Scan result is empty / node / hostile. A hostile can be engaged or skipped. A sector is cleared when every coordinate is revealed and every hostile is defeated.
+- Hub: Shopkeeper = shop + repair + story delivery on one screen (all "talking to a character"). Manage Equipment = loadout + unit management. Both are placeholders.
+- Planned saves: autosave after every combat and after every hub action (purchase, upgrade, equip). 3 slots. Continue always resumes at the Hub, never mid-combat. Cleared progress persists.
+- Loss state (designed, not built): on losing you are disconnected from the run, lose money and your gear is damaged and needs repair. No permadeath.
+- Intended full battle layout (mockup in battle-screen.html, not in the live combat build): four columns: Operator + log | Operator's 4 units | enemy's 4 units | enemy + contextual action panel. Click the Operator or a unit (hover = brighter border, selected = brighter and thicker border), then an action, then a target. The current combat build shows only Operator vs Enemy (two panels).
+- Buttons: "new game" (was "start"), "disconnect" (was "flee"), "skip turn" (see section 9, it is slated for removal). Defend and Reroute buttons were placeholders that were deleted.
+
+## 3. Combat model (as built in exploration-sample.html)
+
+Core: each side has Connection (the HP equivalent; 0 = severed = that side loses) protected by Firewall (an access gate). You cannot hurt Connection until the Firewall is breached (Firewall = 0). Both sides also have Power (mana), CPU and RAM (displayed only, see section 9), and a readiness gauge.
+
+Action families (names come from the real intrusion kill chain: exploit gets access, payload does damage, EW counters defenses):
+1. EXPLOIT (only vs. an unbreached Firewall; never damages Connection): Brute Force (reliable), Zero-Day (rare, expensive, big), Sustained (damage-over-time on the Firewall; one instance per source, recasting refreshes and does not stack; it stops once breached).
+2. PAYLOAD (only after breach; damages Connection): Worm (reliable), Logic Bomb (heavy, immediate), Trojan (delayed detonation after a fuse; while armed the planter is "exposed" and takes 1.5x incoming Worm damage; the enemy can counter it).
+3. DISRUPTION (in the Attack menu, after breach): Jam (knocks the enemy's readiness back 50%), Disable (locks the enemy's Worm for 10 s).
+4. DEFENSE (usable anytime; NOT gated by breach): Decoy (enemy wastes its next action, then you land a free counter), Harden (halves the next hit you take), ECCM (8 s of immunity to enemy Jam), Evict (removes an enemy-planted Trojan; only enabled when one is on you). Quarantine is listed but disabled, waiting on units.
+
+Placeholder numbers (power cost / cooldown seconds / effect): Brute Force 20/4/20 fw dmg. Zero-Day 40/10/45 fw dmg. Sustained 25/5/8 per 3 s. Worm 20/2/15. Logic Bomb 35/6/35. Trojan 20/4/55 after a 12 s fuse. Jam 15/4/-50% readiness. Disable 20/8/10 s lock. Decoy 15/4. Harden 20/5. ECCM 20/6/8 s. Evict 20/5. Start stats: player Connection 150, Firewall 60, Power 100; enemy Connection 150, Firewall 50, Power 100. Enemy is deliberately slightly weaker (readiness 13/s vs 15/s, Power regen 1.6/s vs 2/s, smaller damage).
+
+Enemy AI (simple on purpose): before your Firewall is breached it uses Exploit on it. After the breach it picks randomly among whatever is ready out of Worm / Jam / Trojan (its Jam is blocked by ECCM; its Trojan can be Evicted; its damage is halved by Harden). It has no Zero-Day, Sustained or Logic Bomb. Every enemy is currently identical.
+
+Pacing in the current build (ATB hybrid): each side's readiness gauge fills continuously (player 15/s, enemy 13/s, shown as a plain percentage). When the player's reaches 100%, the WHOLE battle freezes (Power regen, cooldowns, fuses, enemy gauge) and the Attack / Defense / Skip turn / Disconnect menu opens. The enemy acts the instant its own gauge fills. Power regenerates in real time (+2/s) and also freezes during the player's decision. Each action has a Power cost and a real-second cooldown. The player starts a fight at 100% readiness so the first move is instant. Engaging a hostile coordinate IS the engage action (there is no separate "engage target" prompt). Win = enemy Connection <= 0. Loss = yours <= 0 or Disconnect; the hostile stays on the map so it can be retried.
+
+## 4. OPEN DESIGN FORK: pacing model (unresolved, was mid-discussion at export)
+
+Problems found by playing:
+- Three overlapping pacing layers: readiness gauge + per-action cooldowns + Power cost/regen.
+- "Skip turn" is a leftover from the older turn-timer build; its original purpose (cashing in unused turn seconds as Power) no longer exists.
+- If readiness is full but nothing is usable (everything on cooldown or too expensive), the game freezes with an empty menu, and since Power also freezes it can never recover (soft-lock; only Disconnect exits).
+Options discussed in order:
+ a. Remove skip turn. Only open the decision menu when at least one action is usable; otherwise the clock keeps running while cooldowns tick and Power regenerates (the action-RPG "everything's on cooldown while mana regens" feel).
+ b. Slow real-time combat with pause-in-menus (cooldowns + mana).
+ c. User's latest direction: readiness can sit at 100% while the battle KEEPS RUNNING (Power regens, cooldowns tick, the enemy keeps acting; if the enemy Jams you while you wait, you lose that readiness). The game pauses only once the player opens a submenu (Attack/Defense) to choose. This is classic ATB "wait mode". Backing out of a submenu without choosing resumes the clock.
+ d. User then asked about dropping cooldowns and using Power cost alone ("you're open the entire time, so you should balance your power use"). Analysis: most cooldowns (<=6 s) are already shorter than the ~6.7 s gauge refill, so only Zero-Day (10 s) and Disable (8 s) ever matter. Power-only would work. Costs: RAM (meant to speed up EW cooldowns) loses its job; Zero-Day's rarity must come from price alone; banking Power for burst turns possible. Recommendation given: try Power-only first, and re-add a cooldown to Zero-Day only if banking proves too strong. The user had NOT confirmed.
+Ask the user which model to try before changing pacing code. Tell him the content (Firewall/Connection, action lists, enemy kit, exploration, hub) does not depend on the pacing model, so this is a rework of the tick loop, not a redesign.
+
+## 5. Units (designed, NOT built)
+
+- Up to 4 slots: max 2 offense + 2 defense. Bought at the shop. Role is fixed at acquisition; upgrades deepen the role rather than reassign it.
+- Model: additional machines the Operator runs in parallel (DDoS-style: many machines doing the same thing adds up), not a squad of specialist classes. The old Attacker/Blocker/Healer/Support job idea was dropped.
+- Offense units add parallel pressure on the Firewall (they can run Sustained Exploit; each source, meaning the Operator or each unit, has its own non-stacking instance). Defense units reroute/block, mirroring what the enemy does to you.
+- Units do NOT draw from the Operator's Power pool.
+- Units use the same stat template (Connection, Firewall, Power, CPU, RAM) and can be targeted like anything else.
+- Mostly automatic. The Operator can redirect a unit for a manual order (select unit -> action -> target, as in battle-screen.html); afterward that unit is briefly unavailable. Surface this in the log as a status line like "unit 01 not responding" (avoid the literal phrase "cooldown active").
+- The enemy can field up to 4 units too.
+- Hijacking: you can hijack enemy units and they can hijack yours. Counters: Signal Encryption (prevention, an anti-hijack defense) and Quarantine (reaction: cut off a hijacked unit, yours or an enemy's; open question whether that is one action or two).
+- Obsolete rule: "+10 seconds of turn time per unit (hijacked ones too)". It belonged to the turn-timer version and means nothing under ATB. Decide what replaces it, or drop it.
+- THREE UNIT QUESTIONS WERE ASKED AND NOT YET ANSWERED: (1) When a unit's readiness fills: act automatically right away / wait for command / auto-act but overridable in your window? (2) What replaces the +10 s rule? (3) How to supply units for testing with no shop: 2 offense + 2 defense / 1 + 1 / pick on Manage Equipment?
+
+## 6. Scan (designed, NOT built in the current builds; only Sample 1 had an older version)
+
+Passive, always on, tiered against the enemy's Firewall tier. Baseline tier reveals core enemy stats AND the enemy's next action (foresight; so a weak Operator can see they are outclassed and Disconnect). Higher tiers reveal deeper stats (Power, CPU/RAM). During an active breach everything is revealed. Once revealed, a stat updates live. Enemy stats start completely hidden. Foresight is "prep, not haste": information, not extra actions. The enemy "charging up" is surfaced by YOUR Scan, not announced by the enemy. Scan tier is a hardware upgrade. The enemy needs to telegraph big moves for foresight to matter, which isn't built. Old idea: an enemy log panel unlocking at Scan tier 3.
+
+## 7. Decisions and the reasons behind them (do not undo)
+
+1. No map or grid in combat or exploration. The matrix has no physical space; state is shown as stat blocks and text lists. Only the Hub may use art.
+2. The old Shield/Armor/HP chain and Plasma/Laser/Missiles weapons were RETIRED after playtesting (battle-sample.html): one weapon dominated (Plasma spam), EW felt pointless, and the Operator had no way to react. Physical weapons also clashed with the cyberspace theme.
+3. HP became Connection: "who stays connected" is the hacking-native win condition. Firewall is the access gate (breach first, then damage), matching real intrusions.
+4. Exploit and Payload are separate tool families. Exploit (Brute Force etc.) never touches Connection; Payload does the damage. This mirrors the real kill chain and games like Uplink and Cyberpunk 2077 (breach tools vs. quickhack tools).
+5. Each action family gets three options with different COMMITMENT SHAPES (reliable / burst / delayed or sustained), not three sizes of the same thing. That avoids a dominant spam option.
+6. Jam and Disable moved from Defense into Attack because they hinder the enemy. Defense (Decoy/Harden/ECCM/Evict) is not gated by breach, since protecting yourself shouldn't depend on your own offense having succeeded.
+7. Cut or merged for simplicity: Overheat folded in as a future upgrade tier of Disable (not built); Backup Power and power channels cut; Cooling folded into Power; Connection status+strength merged; Radar and Scan unified; the Range band system removed from the playable builds (it only mattered for the retired weapons).
+8. Power is the mana pool and regenerates continuously in real time (the user's explicit design, "always ticking"). It also freezes during the player's decision window (explicit). Lesson learned: if regen is lower than the cheapest action's cost, the player gets trapped at a floor. Keep regen above the cheapest action cost. Power regen rate is upgradeable at the shop (noted).
+9. Readiness is a text percentage (no bars). A first-move instant start replaces a cold start.
+10. The enemy mirrors the player's kit but is simpler and weaker on purpose, so the player's tools are tested first.
+11. Units stay simple and the Operator holds the complexity. Reactive Power rerouting was shelved as "too slippery" for the Operator to juggle; defense units and Harden take over that role.
+12. Fixed hub story sequence, autosave-everything and Continue-always-to-Hub were chosen to keep the system simple and never lose progress.
+13. Design method: playtest a small sample, find what breaks, rebuild. The old foundation was thrown away after Sample 1 for exactly that reason. Add one system at a time.
+
+## 8. What is finished and working
+
+- Full navigation shell: Intro, Hub, Shopkeeper/Equipment placeholders, Sector Select, Coordinate List, Combat, history-based Back, confirm overlays, blank exit screen.
+- Procedural sectors (3 sectors x 6 coordinates, 40% empty / 30% node / 30% hostile), scan-to-reveal, cleared tracking.
+- Complete combat loop vs. a simple AI: Exploit -> breach -> Payload, Jam/Disable, Decoy/Harden/ECCM/Evict, enemy Jam and Trojan, Sustained ticks, Trojan fuses and exposure, decision-window freeze, first-move-instant, win/lose handling that feeds back into exploration.
+
+## 9. Unfinished, partial or broken
+
+- Pacing fork unresolved (section 4); skip turn still exists; empty-menu soft-lock is possible.
+- CPU and RAM are displayed but have NO mechanical effect in the current builds (battle-sample-3.html used them to shorten cooldowns; the ATB builds hard-code seconds). Intended meaning: CPU = how often you act (tempo), RAM = how fast your utility/EW options recharge.
+- Minor display bugs: the Trojan fuse and Disable lock timers show raw floating-point seconds (for example 11.799999). Wrap them in Math.ceil() like the ECCM and enemy-Trojan timers.
+- btnLeaveCombat in exploration-sample.html is permanently disabled and unused.
+- Sectors and coordinates are random on every page load; nothing is saved.
+- Nodes are placeholders (they only say "data retrieved"). No rewards, currency, shop, repair or loss penalties exist. Shopkeeper and Equipment screens are stubs.
+- Every enemy is identical; no scaling by sector.
+- The combat engine is copy-pasted across battle-sample-4.html and exploration-sample.html (and older variants in the other files). Consolidate it before adding units.
+- Units, Scan/foresight, enemy telegraphing, Quarantine, Signal Encryption and hijacking are all unbuilt.
+
+## 10. Ideas discussed but not built
+
+- Music and sound effects (later pass).
+- New Game tutorial led by the shopkeeper ("you're a recruit"); probably needs a scripted first fight.
+- New Game will need a save-slot step once saves exist.
+- Shop: currency and how it is earned, parts and unit purchasing, pricing, Power-regen upgrades, Overheat as a Disable upgrade tier, repair mechanics, loadout-assembly screen. Pixel-art shopkeeper and item art.
+- Mission-type flavor on Payload (retrieve info vs. disable a network): after the fight the mission is simply done.
+- Enemy variety, bosses, enemy units, enemy EW depth.
+- Pattern memorization (learn enemy-type behavior across fights) as a possible later system.
+- Sectors turning hostile after the story's turn, with a status like "cleared - activity detected".
+- Gradual UI reveal as the player progresses.
+
+## 11. What we were about to do next
+
+1. Settle the pacing fork (section 4), remove skip turn, and fix the empty-menu soft-lock.
+2. Ask David the three unit questions (section 5), then build units.
+3. Build the save system (3 slots, autosave rules above), which also makes Continue and New Game meaningful.
+4. Hub content: shopkeeper, shop and currency, repair, loadout screen, then the tutorial.
+5. Scan/foresight and enemy telegraphing.
+6. Narrative writing, music and SFX.
+Suggested engineering step when you start: split the single-file HTML into index.html + css/ + js/ modules (state, combat, exploration, hub, ui), keeping the numbers in one config object (the ACTIONS table) so balance tweaks are easy.
+
+## 12. Files
+
+All files are single-file HTML with inline CSS and JS. There is no build step and no dependencies. Open in a browser to run.
+- exploration-sample.html: CURRENT MAIN BUILD. Intro -> Hub -> Sector Select -> Coordinates -> ATB-hybrid combat, fully connected. Start here.
+- battle-sample-4.html: standalone version of the ATB combat engine (readiness gauges, decision-window freeze, Defense menu, smarter enemy). The same engine is embedded in exploration-sample.html.
+- battle-sample-3.html: reference. The older TURN-BASED version of the Connection/Firewall combat: 10-second turn timer, Skip with leftover-time-to-Power conversion, CPU/RAM tiers shortening cooldowns, Jam as an extra turn, Defense = Decoy/Jam/Disable. Useful as a record of how the system evolved.
+- battle-sample.html: reference only, OBSOLETE foundation: Shield/Armor/HP with Plasma/Laser/Missiles, Scan reveal tiers, EW waves. Kept as a record of what was tested and discarded.
+- battle-screen.html: reference. Static four-column layout mockup with the select-actor -> action -> target interaction, hover/selected borders and a unit "not responding" cooldown demo. Reuse its interaction model for units.
+- (Not part of this game: two unrelated early escape-room files, a Python CLI and a JS/HTML port, were uploaded at the start of the chat and are not included.)
+```
+
+October 6, 2026

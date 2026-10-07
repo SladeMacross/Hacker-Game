@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Battle Screen</title>
+<style>
+  :root {
+    --bg: #0a0d0a;
+    --panel: #10140f;
+    --line: #1f2b1c;
+    --line-hover: #3f6b3a;
+    --line-selected: #5ee08a;
+    --line-target: #e0c65e;
+    --text: #c8e6c0;
+    --text-dim: #5f7a58;
+    --text-faint: #3a4a36;
+    --accent: #5ee08a;
+    --target-accent: #e0c65e;
+    --danger: #e0665e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', ui-monospace, monospace;
+  }
+  body {
+    padding: 14px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .board {
+    max-width: 1000px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1.3fr 1fr 1fr 1.3fr;
+    gap: 8px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 12px;
+  }
+  .col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .label {
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    color: var(--text-dim);
+    margin: 0 0 8px;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 1px 0;
+  }
+  .stat-row span:first-child { color: var(--text-dim); }
+  .unit-block { padding: 8px 10px; }
+  .unit-name { font-size: 11px; margin: 0 0 5px; color: var(--text); }
+  .unit-block .stat-row { font-size: 10px; }
+  .unit-unknown {
+    color: var(--text-faint);
+    font-size: 11px;
+    min-height: 96px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* selectable states: operator + own units only */
+  .selectable {
+    cursor: pointer;
+    transition: border-color 120ms ease, border-width 120ms ease, opacity 120ms ease;
+    border-width: 1px;
+  }
+  .selectable:hover {
+    border-color: var(--line-hover);
+  }
+  .selectable.is-selected {
+    border-color: var(--line-selected);
+    border-width: 2px;
+    padding: 9px 11px; /* compensate for thicker border so content doesn't shift */
+  }
+  .unit-block.selectable.is-selected { padding: 7px 9px; }
+
+  .selectable.is-cooldown {
+    cursor: not-allowed;
+    opacity: 0.45;
+    pointer-events: none;
+  }
+
+  /* targetable enemy blocks, active only once an order needs a target */
+  .targetable {
+    cursor: pointer;
+    transition: border-color 120ms ease, border-width 120ms ease;
+    border-width: 1px;
+  }
+  .targetable:hover {
+    border-color: var(--line-target);
+  }
+  .targetable.is-armed {
+    border-color: var(--line-target);
+  }
+
+  .log {
+    flex: 1;
+    min-height: 120px;
+    overflow: hidden;
+    font-size: 11px;
+    line-height: 1.7;
+  }
+  .log p { margin: 0; color: var(--text-dim); }
+  .log p.pending { color: var(--text); }
+
+  .action-panel {
+    flex: 1;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .action-panel .hint {
+    color: var(--text-faint);
+    font-size: 10px;
+    text-align: center;
+  }
+  .action-panel .option-list {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .action-panel .option-list.visible { display: flex; }
+  .action-panel .option-list button {
+    text-align: left;
+    padding: 6px 8px;
+  }
+
+  .actions {
+    max-width: 1000px;
+    margin: 10px auto 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  button {
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 0;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.disconnect:hover { border-color: var(--danger); color: var(--danger); }
+  button:disabled {
+    color: var(--text-faint);
+    border-color: var(--line);
+    cursor: not-allowed;
+  }
+
+  @media (max-width: 720px) {
+    .board { grid-template-columns: 1fr 1fr; }
+    .actions { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+  <div class="board">
+
+    <!-- OPERATOR -->
+    <div class="col">
+      <div class="panel selectable" data-actor="operator" data-name="operator">
+        <p class="label">operator</p>
+        <div class="stat-row"><span>hp</span><span>420</span></div>
+        <div class="stat-row"><span>armor</span><span>150</span></div>
+        <div class="stat-row"><span>shield</span><span>80</span></div>
+        <div class="stat-row"><span>power</span><span>60</span></div>
+        <div class="stat-row"><span>connection</span><span>strong</span></div>
+        <div class="stat-row"><span>firewall</span><span>t2</span></div>
+        <div class="stat-row"><span>processing</span><span>t1</span></div>
+        <div class="stat-row"><span>scan</span><span>t1</span></div>
+      </div>
+      <div class="panel log" id="logPanel">
+        <p class="label" style="margin-bottom:6px;">log</p>
+        <p>&gt; connection established</p>
+        <p>&gt; operator scanned enemy</p>
+        <p>&gt; firewall breach attempt t1 vs t3 — fail</p>
+        <p>&gt; operator fired laser — miss</p>
+        <p>&gt; unit 02 blocked incoming hit</p>
+        <p class="pending" id="logPending">&gt; awaiting action</p>
+      </div>
+    </div>
+
+    <!-- OPERATOR UNITS -->
+    <div class="col">
+      <div class="panel unit-block selectable" data-actor="unit1" data-name="unit 01 — attacker">
+        <p class="unit-name">unit 01 — attacker</p>
+        <div class="stat-row"><span>hp</span><span>120</span></div>
+        <div class="stat-row"><span>armor</span><span>40</span></div>
+        <div class="stat-row"><span>shield</span><span>0</span></div>
+        <div class="stat-row"><span>power</span><span>20</span></div>
+        <div class="stat-row"><span>connection</span><span>mod</span></div>
+        <div class="stat-row"><span>firewall</span><span>t1</span></div>
+        <div class="stat-row"><span>processing</span><span>t1</span></div>
+        <div class="stat-row"><span>scan</span><span>-</span></div>
+      </div>
+      <div class="panel unit-block selectable" data-actor="unit2" data-name="unit 02 — blocker">
+        <p class="unit-name">unit 02 — blocker</p>
+        <div class="stat-row"><span>hp</span><span>200</span></div>
+        <div class="stat-row"><span>armor</span><span>100</span></div>
+        <div class="stat-row"><span>shield</span><span>60</span></div>
+        <div class="stat-row"><span>power</span><span>30</span></div>
+        <div class="stat-row"><span>connection</span><span>strong</span></div>
+        <div class="stat-row"><span>firewall</span><span>t2</span></div>
+        <div class="stat-row"><span>processing</span><span>t1</span></div>
+        <div class="stat-row"><span>scan</span><span>-</span></div>
+      </div>
+      <div class="panel unit-block selectable" data-actor="unit3" data-name="unit 03 — healer">
+        <p class="unit-name">unit 03 — healer</p>
+        <div class="stat-row"><span>hp</span><span>90</span></div>
+        <div class="stat-row"><span>armor</span><span>20</span></div>
+        <div class="stat-row"><span>shield</span><span>0</span></div>
+        <div class="stat-row"><span>power</span><span>25</span></div>
+        <div class="stat-row"><span>connection</span><span>mod</span></div>
+        <div class="stat-row"><span>firewall</span><span>t1</span></div>
+        <div class="stat-row"><span>processing</span><span>t1</span></div>
+        <div class="stat-row"><span>scan</span><span>-</span></div>
+      </div>
+      <div class="panel unit-block selectable" data-actor="unit4" data-name="unit 04 — support">
+        <p class="unit-name">unit 04 — support</p>
+        <div class="stat-row"><span>hp</span><span>90</span></div>
+        <div class="stat-row"><span>armor</span><span>20</span></div>
+        <div class="stat-row"><span>shield</span><span>20</span></div>
+        <div class="stat-row"><span>power</span><span>25</span></div>
+        <div class="stat-row"><span>connection</span><span>mod</span></div>
+        <div class="stat-row"><span>firewall</span><span>t1</span></div>
+        <div class="stat-row"><span>processing</span><span>t1</span></div>
+        <div class="stat-row"><span>scan</span><span>-</span></div>
+      </div>
+    </div>
+
+    <!-- ENEMY UNITS -->
+    <div class="col">
+      <div class="panel unit-unknown" data-target="enemy-unit1" data-target-name="enemy unit 01">enemy unit 01 — unknown</div>
+      <div class="panel unit-unknown" data-target="enemy-unit2" data-target-name="enemy unit 02">enemy unit 02 — unknown</div>
+      <div class="panel unit-unknown" data-target="enemy-unit3" data-target-name="enemy unit 03">enemy unit 03 — unknown</div>
+      <div class="panel unit-unknown" data-target="enemy-unit4" data-target-name="enemy unit 04">enemy unit 04 — unknown</div>
+    </div>
+
+    <!-- ENEMY + CONTEXTUAL ACTION PANEL -->
+    <div class="col">
+      <div class="panel" data-target="enemy" data-target-name="enemy">
+        <p class="label">enemy</p>
+        <p style="font-size:11px; color: var(--text-faint); margin:0;">no data — run scan</p>
+      </div>
+      <div class="panel action-panel" id="actionPanel">
+        <p class="hint" id="actionHint">select operator or a unit</p>
+        <div class="option-list" id="optionList"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="actions">
+    <button id="btnAttack" disabled>attack</button>
+    <button id="btnScan" disabled>scan</button>
+    <button id="btnEw" disabled>ew</button>
+    <button class="disconnect">disconnect</button>
+  </div>
+
+  <script>
+    const selectables = Array.from(document.querySelectorAll('.selectable'));
+    const targetables = Array.from(document.querySelectorAll('[data-target]'));
+    const hint = document.getElementById('actionHint');
+    const optionList = document.getElementById('optionList');
+    const btnAttack = document.getElementById('btnAttack');
+    const btnScan = document.getElementById('btnScan');
+    const btnEw = document.getElementById('btnEw');
+    const logPanel = document.getElementById('logPanel');
+    const logPending = document.getElementById('logPending');
+
+    let selected = null;      // currently selected actor element
+    let pendingAction = null; // { kind, label } once an option is chosen, awaiting a target
+
+    function addLog(text) {
+      const p = document.createElement('p');
+      p.textContent = '> ' + text;
+      logPanel.insertBefore(p, logPending);
+    }
+
+    function resetIdle() {
+      selected = null;
+      pendingAction = null;
+      selectables.forEach(o => o.classList.remove('is-selected'));
+      targetables.forEach(o => o.classList.remove('is-armed'));
+      btnAttack.disabled = true;
+      btnScan.disabled = true;
+      btnEw.disabled = true;
+      hint.style.display = 'block';
+      hint.textContent = 'select operator or a unit';
+      optionList.classList.remove('visible');
+      optionList.innerHTML = '';
+    }
+
+    function armTargets(actionLabel) {
+      pendingAction = actionLabel;
+      targetables.forEach(o => o.classList.add('is-armed'));
+      hint.style.display = 'block';
+      hint.textContent = 'select a target for ' + actionLabel;
+      optionList.classList.remove('visible');
+      optionList.innerHTML = '';
+    }
+
+    selectables.forEach(el => {
+      el.addEventListener('click', () => {
+        if (el.classList.contains('is-cooldown')) return;
+        const isSame = selected === el;
+        selectables.forEach(o => o.classList.remove('is-selected'));
+        targetables.forEach(o => o.classList.remove('is-armed'));
+        pendingAction = null;
+
+        if (isSame) {
+          resetIdle();
+          return;
+        }
+
+        el.classList.add('is-selected');
+        selected = el;
+        hint.style.display = 'block';
+        hint.textContent = el.dataset.name + ' selected — choose an action below';
+        optionList.classList.remove('visible');
+        optionList.innerHTML = '';
+
+        const isOperator = el.dataset.actor === 'operator';
+        btnAttack.disabled = false;
+        btnScan.disabled = !isOperator;
+        btnEw.disabled = !isOperator;
+      });
+    });
+
+    const optionsFor = {
+      attack: ['plasma — short range', 'laser — medium range', 'missiles — long range'],
+      scan: ['run scan (tier 1)'],
+      ew: ['jam connection', 'breach firewall']
+    };
+
+    function showOptions(kind) {
+      if (!selected) return;
+      hint.style.display = 'none';
+      optionList.innerHTML = '';
+      optionsFor[kind].forEach(label => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.addEventListener('click', () => armTargets(label));
+        optionList.appendChild(b);
+      });
+      optionList.classList.add('visible');
+    }
+
+    btnAttack.addEventListener('click', () => showOptions('attack'));
+    btnScan.addEventListener('click', () => showOptions('scan'));
+    btnEw.addEventListener('click', () => showOptions('ew'));
+
+    targetables.forEach(t => {
+      t.addEventListener('click', () => {
+        if (!pendingAction || !selected) return;
+        const actorName = selected.dataset.name;
+        const actorEl = selected;
+        const isUnit = actorEl.dataset.actor !== 'operator';
+
+        addLog(actorName + ' used ' + pendingAction + ' on ' + t.dataset.targetName);
+
+        if (isUnit) {
+          actorEl.classList.add('is-cooldown');
+          actorEl.classList.remove('is-selected');
+          addLog(actorName + ' not responding');
+          setTimeout(() => {
+            actorEl.classList.remove('is-cooldown');
+            addLog(actorName + ' back online');
+          }, 6000);
+        }
+
+        resetIdle();
+      });
+    });
+  </script>
+
+</body>
+</html>

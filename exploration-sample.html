@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Exploration + Combat</title>
+<style>
+  :root {
+    --bg: #0a0d0a;
+    --panel: #10140f;
+    --line: #1f2b1c;
+    --line-hover: #3f6b3a;
+    --text: #c8e6c0;
+    --text-dim: #5f7a58;
+    --text-faint: #3a4a36;
+    --accent: #5ee08a;
+    --danger: #e0665e;
+    --warn: #e0c65e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', ui-monospace, monospace;
+  }
+  body {
+    padding: 14px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .note {
+    max-width: 900px;
+    margin: 0 auto 10px;
+    font-size: 10px;
+    color: var(--text-faint);
+    text-align: center;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 12px;
+  }
+  .label {
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    color: var(--text-dim);
+    margin: 0 0 10px;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    margin-bottom: 6px;
+    cursor: pointer;
+  }
+  .row:hover { border-color: var(--line-hover); }
+  .row .tag { font-size: 10px; color: var(--text-dim); }
+  .row .tag.cleared { color: var(--accent); }
+  .row .tag.hostile { color: var(--danger); }
+  .row .tag.node { color: var(--warn); }
+  .coord-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    margin-bottom: 6px;
+  }
+  .coord-row .meta { color: var(--text-dim); font-size: 10px; }
+  button {
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button.danger:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+  button:disabled { color: var(--text-faint); border-color: var(--line); cursor: not-allowed; opacity: 0.5; }
+  .backbar { margin-bottom: 10px; }
+  .hidden { display: none; }
+  #confirmOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 13, 10, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 50;
+  }
+  #confirmOverlay.hidden { display: none; }
+  #confirmOverlay .panel { max-width: 320px; width: 100%; }
+
+  .log {
+    height: 140px;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.6;
+    margin: 8px 0;
+  }
+  .log p { margin: 0; color: var(--text-dim); }
+  .log p.good { color: var(--accent); }
+  .log p.bad { color: var(--danger); }
+  .log p.warn { color: var(--warn); }
+
+  .board2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  .stat-row { display: flex; justify-content: space-between; font-size: 12px; padding: 1px 0; }
+  .stat-row span:first-child { color: var(--text-dim); }
+  .breached-tag { color: var(--warn); font-size: 10px; }
+  .ready-tag { color: var(--accent); }
+
+  .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .submenu { margin-top: 8px; display: none; flex-direction: column; gap: 6px; }
+  .submenu.visible { display: flex; }
+  .submenu button { text-align: left; padding: 8px 10px; }
+  .submenu .opt-meta { color: var(--text-faint); font-size: 10px; }
+
+  .gameover { text-align: center; font-size: 13px; padding: 10px; display: none; }
+  .gameover.visible { display: block; }
+  .gameover.win { color: var(--accent); }
+  .gameover.lose { color: var(--danger); }
+
+  @media (max-width: 600px) {
+    .board2 { grid-template-columns: 1fr; }
+    .actions { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<p class="note">intro → hub → enter matrix → sector select → coordinates → combat, all connected. shopkeeper/manage equipment are placeholders. back buttons return to wherever you actually came from, not a fixed parent. no save system yet, so "continue" is disabled. quit has confirmations on both the hub and intro, matching what was designed.</p>
+
+<div class="wrap">
+
+  <!-- INTRO -->
+  <div id="screenIntro">
+    <div class="panel" style="text-align: center; padding: 40px 20px;">
+      <p class="label" style="font-size: 16px; margin-bottom: 20px;">[ game title placeholder ]</p>
+      <div style="display: flex; flex-direction: column; gap: 8px; max-width: 240px; margin: 0 auto;">
+        <button id="btnStart">new game</button>
+        <button id="btnIntroContinue" disabled title="no saves exist yet">continue</button>
+        <button class="danger" id="btnIntroQuit">quit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLOSED -->
+  <div id="screenClosed" class="hidden"></div>
+
+  <!-- HUB -->
+  <div id="screenHub" class="hidden">
+    <div class="panel" style="text-align: center; padding: 30px 20px;">
+      <p class="label" style="margin-bottom: 20px;">hub</p>
+      <div style="display: flex; flex-direction: column; gap: 8px; max-width: 280px; margin: 0 auto;">
+        <button id="btnGoShopkeeper">shopkeeper</button>
+        <button id="btnGoEquipment">manage equipment</button>
+        <button id="btnGoMatrix">enter matrix</button>
+        <button class="danger" id="btnHubQuit">quit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHOPKEEPER (placeholder) -->
+  <div id="screenShopkeeper" class="hidden">
+    <div class="backbar"><button id="btnBackShopkeeper">back</button></div>
+    <div class="panel">
+      <p class="label">shopkeeper</p>
+      <p class="note" style="margin: 0;">shop, repair, and story delivery live here — not yet built.</p>
+    </div>
+  </div>
+
+  <!-- MANAGE EQUIPMENT (placeholder) -->
+  <div id="screenEquipment" class="hidden">
+    <div class="backbar"><button id="btnBackEquipment">back</button></div>
+    <div class="panel">
+      <p class="label">manage equipment</p>
+      <p class="note" style="margin: 0;">loadout and unit management live here — not yet built.</p>
+    </div>
+  </div>
+
+  <!-- SECTOR SELECT -->
+  <div id="screenSectorSelect" class="hidden">
+    <div class="backbar"><button id="btnBackToHub">back</button></div>
+    <div class="panel">
+      <p class="label">sector select</p>
+      <div id="sectorList"></div>
+    </div>
+  </div>
+
+  <!-- COORDINATE LIST -->
+  <div id="screenCoordList" class="hidden">
+    <div class="backbar"><button id="btnBackToSectors">back</button></div>
+    <div class="panel">
+      <p class="label" id="coordListLabel">sector</p>
+      <div id="coordList"></div>
+    </div>
+  </div>
+
+  <!-- COMBAT -->
+  <div id="screenCombat" class="hidden">
+    <div class="backbar"><button id="btnLeaveCombat" disabled>back (disabled mid-fight)</button></div>
+
+    <div class="board2">
+      <div class="panel" id="playerPanel"><p class="label">operator</p></div>
+      <div class="panel" id="enemyPanel"><p class="label">enemy</p></div>
+    </div>
+
+    <p class="note" id="statusDisplay" style="margin-bottom: 6px;">awaiting engagement</p>
+
+    <div class="panel log" id="log"></div>
+
+    <div class="actions hidden" id="actionButtonsWrap">
+      <button id="btnAttack">attack</button>
+      <button id="btnDefense">defense</button>
+      <button id="btnSkip">skip turn</button>
+      <button class="danger" id="btnDisconnect">disconnect</button>
+    </div>
+
+    <div class="submenu" id="submenu"></div>
+    <div class="gameover" id="gameover"></div>
+    <div id="combatResultBar" class="hidden" style="margin-top: 10px; text-align: center;">
+      <button id="btnReturnToCoords">return to coordinate list</button>
+    </div>
+  </div>
+
+  <!-- CONFIRM OVERLAY -->
+  <div id="confirmOverlay" class="hidden">
+    <div class="panel" style="text-align: center;">
+      <p id="confirmMessage" style="margin: 0 0 12px;"></p>
+      <div style="display: flex; gap: 8px; justify-content: center;">
+        <button class="danger" id="confirmYes">confirm</button>
+        <button id="confirmNo">cancel</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // =========================================================
+  // EXPLORATION DATA
+  // =========================================================
+  const COORDS_PER_SECTOR = 6;
+  const SECTOR_COUNT = 3;
+
+  function randCoordId() {
+    const p = () => String(Math.floor(Math.random() * 90) + 1).padStart(2, '0');
+    return `${p()}.${p()}.${p()}`;
+  }
+
+  function generateSector(name) {
+    const coords = [];
+    const outcomes = [];
+    // weighted outcome pool: 40% empty, 30% node, 30% hostile
+    for (let i = 0; i < COORDS_PER_SECTOR; i++) {
+      const r = Math.random();
+      outcomes.push(r < 0.4 ? 'empty' : r < 0.7 ? 'node' : 'hostile');
+    }
+    for (let i = 0; i < COORDS_PER_SECTOR; i++) {
+      coords.push({ id: randCoordId(), trueType: outcomes[i], revealed: false, defeated: false });
+    }
+    return { name, coords };
+  }
+
+  const sectors = [];
+  for (let i = 1; i <= SECTOR_COUNT; i++) sectors.push(generateSector(`Sector ${i}`));
+
+  let currentSectorIdx = null;
+
+  function sectorCleared(sector) {
+    return sector.coords.every(c => c.revealed && (c.trueType !== 'hostile' || c.defeated));
+  }
+
+  // =========================================================
+  // SCREEN SWITCHING
+  // =========================================================
+  const SCREENS = ['screenIntro', 'screenClosed', 'screenHub', 'screenShopkeeper', 'screenEquipment', 'screenSectorSelect', 'screenCoordList', 'screenCombat'];
+  let currentScreen = null;
+  let screenHistory = [];
+
+  function showScreen(id, isBack) {
+    if (!isBack && currentScreen && currentScreen !== id) screenHistory.push(currentScreen);
+    currentScreen = id;
+    SCREENS.forEach(s => {
+      document.getElementById(s).classList.toggle('hidden', s !== id);
+    });
+  }
+
+  function goBack() {
+    const prev = screenHistory.pop();
+    if (prev) showScreen(prev, true);
+  }
+
+  function showConfirm(message, onConfirm) {
+    const overlay = document.getElementById('confirmOverlay');
+    document.getElementById('confirmMessage').textContent = message;
+    overlay.classList.remove('hidden');
+    const yesBtn = document.getElementById('confirmYes');
+    const noBtn = document.getElementById('confirmNo');
+    const cleanup = () => { overlay.classList.add('hidden'); yesBtn.onclick = null; noBtn.onclick = null; };
+    yesBtn.onclick = () => { cleanup(); onConfirm(); };
+    noBtn.onclick = () => { cleanup(); };
+  }
+
+  document.getElementById('btnStart').addEventListener('click', () => showScreen('screenHub'));
+  document.getElementById('btnIntroQuit').addEventListener('click', () => {
+    showConfirm('Exit the game entirely?', () => showScreen('screenClosed'));
+  });
+
+  document.getElementById('btnGoShopkeeper').addEventListener('click', () => showScreen('screenShopkeeper'));
+  document.getElementById('btnGoEquipment').addEventListener('click', () => showScreen('screenEquipment'));
+  document.getElementById('btnGoMatrix').addEventListener('click', () => showScreen('screenSectorSelect'));
+  document.getElementById('btnHubQuit').addEventListener('click', () => {
+    showConfirm('Return to the intro screen?', () => showScreen('screenIntro'));
+  });
+
+  document.getElementById('btnBackShopkeeper').addEventListener('click', goBack);
+  document.getElementById('btnBackEquipment').addEventListener('click', goBack);
+  document.getElementById('btnBackToHub').addEventListener('click', goBack);
+
+  function renderSectorSelect() {
+    const el = document.getElementById('sectorList');
+    el.innerHTML = '';
+    sectors.forEach((sector, idx) => {
+      const cleared = sectorCleared(sector);
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `<span>${sector.name}</span><span class="tag ${cleared ? 'cleared' : ''}">${cleared ? 'cleared' : 'unresolved coordinates remain'}</span>`;
+      row.addEventListener('click', () => {
+        currentSectorIdx = idx;
+        renderCoordList();
+        showScreen('screenCoordList');
+      });
+      el.appendChild(row);
+    });
+  }
+
+  function renderCoordList() {
+    const sector = sectors[currentSectorIdx];
+    document.getElementById('coordListLabel').textContent = sector.name;
+    const el = document.getElementById('coordList');
+    el.innerHTML = '';
+    sector.coords.forEach((c, idx) => {
+      const row = document.createElement('div');
+      row.className = 'coord-row';
+      let right = '';
+      if (!c.revealed) {
+        right = `<button data-scan="${idx}">scan</button>`;
+      } else if (c.trueType === 'empty') {
+        right = `<span class="meta">clear</span>`;
+      } else if (c.trueType === 'node') {
+        right = `<span class="meta">node — data retrieved</span>`;
+      } else if (c.trueType === 'hostile') {
+        right = c.defeated
+          ? `<span class="meta">cleared</span>`
+          : `<button data-engage="${idx}">engage</button>`;
+      }
+      row.innerHTML = `<span>${c.id}</span>${right}`;
+      el.appendChild(row);
+    });
+
+    el.querySelectorAll('[data-scan]').forEach(b => {
+      b.addEventListener('click', () => {
+        const c = sector.coords[parseInt(b.dataset.scan)];
+        c.revealed = true;
+        renderCoordList();
+      });
+    });
+    el.querySelectorAll('[data-engage]').forEach(b => {
+      b.addEventListener('click', () => {
+        const coordIdx = parseInt(b.dataset.engage);
+        launchCombat(currentSectorIdx, coordIdx);
+      });
+    });
+  }
+
+  document.getElementById('btnBackToSectors').addEventListener('click', () => {
+    renderSectorSelect();
+    goBack();
+  });
+
+  document.getElementById('btnReturnToCoords').addEventListener('click', () => {
+    document.getElementById('combatResultBar').classList.add('hidden');
+    renderCoordList();
+    goBack();
+  });
+
+  // =========================================================
+  // COMBAT ENGINE (ported from battle-sample-4, re-initializable)
+  // =========================================================
+  const TICK_MS = 200;
+  const GAUGE_MAX = 100;
+  const PLAYER_FILL_PER_SEC = 15;
+  const ENEMY_FILL_PER_SEC = 13;
+  const PLAYER_POWER_PER_SEC = 2;
+  const ENEMY_POWER_PER_SEC = 1.6;
+
+  const ACTIONS = {
+    exploit:   { cost: 20, cdSec: 4,  dmgFirewall: 20 },
+    zeroday:   { cost: 40, cdSec: 10, dmgFirewall: 45 },
+    sustained: { cost: 25, cdSec: 5,  tickDmg: 8, tickIntervalSec: 3 },
+    worm:      { cost: 20, cdSec: 2,  dmgConnection: 15 },
+    logicbomb: { cost: 35, cdSec: 6,  dmgConnection: 35 },
+    trojan:    { cost: 20, cdSec: 4,  detonateDmg: 55, fuseSec: 12, exposedMultiplier: 1.5 },
+    jam:       { cost: 15, cdSec: 4,  gaugeSetback: 50 },
+    disable:   { cost: 20, cdSec: 8,  lockSec: 10 },
+    decoy:     { cost: 15, cdSec: 4 },
+    harden:    { cost: 20, cdSec: 5 },
+    eccm:      { cost: 20, cdSec: 6, durationSec: 8 },
+    evict:     { cost: 20, cdSec: 5 },
+    enemyExploit: { cost: 20, cdSec: 4, dmgFirewall: 18 },
+    enemyWorm:    { cost: 15, cdSec: 2, dmgConnection: 12 },
+    enemyJam:     { cost: 15, cdSec: 5, gaugeSetback: 40 },
+    enemyTrojan:  { cost: 20, cdSec: 6, detonateDmg: 40, fuseSec: 10 }
+  };
+
+  let state = null;
+  let combatInterval = null;
+  let onCombatResolved = null; // callback(won: bool)
+
+  function freshCombatState() {
+    return {
+      battleStarted: false,
+      gameOver: false,
+      decisionPause: false,
+      player: {
+        connection: 150, connectionMax: 150,
+        firewall: 60, firewallMax: 60,
+        power: 100, powerMax: 100,
+        cpuTier: 1, ramTier: 1,
+        gauge: 0,
+        cd: { exploit: 0, zeroday: 0, sustained: 0, worm: 0, logicbomb: 0, trojan: 0, jam: 0, disable: 0, decoy: 0, harden: 0, eccm: 0, evict: 0 },
+        sustainedActive: false, sustainedTimer: 0,
+        trojanPending: false, trojanSecLeft: 0,
+        hardenActive: false,
+        eccmActive: false, eccmSecLeft: 0,
+        trojanOnMe: false, trojanOnMeSecLeft: 0
+      },
+      enemy: {
+        connection: 150, connectionMax: 150,
+        firewall: 50, firewallMax: 50,
+        power: 100, powerMax: 100,
+        cpuTier: 1,
+        gauge: 0,
+        cd: { exploit: 0, worm: 0, jam: 0, trojan: 0 },
+        wormLockedSec: 0,
+        decoyWasteNext: false
+      }
+    };
+  }
+
+  const logEl = document.getElementById('log');
+  function log(text, cls) {
+    const p = document.createElement('p');
+    if (cls) p.className = cls;
+    p.textContent = '> ' + text;
+    logEl.appendChild(p);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function renderPlayer() {
+    const p = state.player;
+    const breached = p.firewall <= 0;
+    document.getElementById('playerPanel').innerHTML = `
+      <p class="label">operator</p>
+      <div class="stat-row"><span>connection</span><span>${p.connection}/${p.connectionMax}</span></div>
+      <div class="stat-row"><span>firewall</span><span>${breached ? '<span class="breached-tag">breached</span>' : p.firewall + '/' + p.firewallMax}</span></div>
+      <div class="stat-row"><span>power</span><span>${Math.floor(p.power)}/${p.powerMax}</span></div>
+      <div class="stat-row"><span>cpu</span><span>t${p.cpuTier}</span></div>
+      <div class="stat-row"><span>ram</span><span>t${p.ramTier}</span></div>
+      <div class="stat-row"><span>readiness</span><span>${p.gauge >= GAUGE_MAX ? '<span class="ready-tag">READY — ATTACK AVAILABLE</span>' : Math.floor(p.gauge) + '%'}</span></div>
+      ${p.sustainedActive ? `<div class="stat-row"><span>sustained</span><span style="color:var(--accent)">running</span></div>` : ''}
+      ${p.trojanPending ? `<div class="stat-row"><span>trojan</span><span style="color:var(--danger)">armed — ${p.trojanSecLeft}s · exposed</span></div>` : ''}
+      ${p.hardenActive ? `<div class="stat-row"><span>hardened</span><span style="color:var(--accent)">next hit halved</span></div>` : ''}
+      ${p.eccmActive ? `<div class="stat-row"><span>eccm</span><span style="color:var(--accent)">active — ${Math.ceil(p.eccmSecLeft)}s</span></div>` : ''}
+      ${p.trojanOnMe ? `<div class="stat-row"><span>enemy trojan</span><span style="color:var(--danger)">planted — detonates in ${Math.ceil(p.trojanOnMeSecLeft)}s</span></div>` : ''}
+    `;
+  }
+
+  function renderEnemy() {
+    const e = state.enemy;
+    const breached = e.firewall <= 0;
+    let lockLine = e.wormLockedSec > 0 ? `<div class="stat-row"><span>worm</span><span style="color:var(--warn)">disabled (${e.wormLockedSec}s)</span></div>` : '';
+    document.getElementById('enemyPanel').innerHTML = `
+      <p class="label">enemy</p>
+      <div class="stat-row"><span>connection</span><span>${e.connection}/${e.connectionMax}</span></div>
+      <div class="stat-row"><span>firewall</span><span>${breached ? '<span class="breached-tag">breached</span>' : e.firewall + '/' + e.firewallMax}</span></div>
+      <div class="stat-row"><span>power</span><span>${Math.floor(e.power)}/${e.powerMax}</span></div>
+      <div class="stat-row"><span>cpu</span><span>t${e.cpuTier}</span></div>
+      <div class="stat-row"><span>readiness</span><span>${Math.floor(e.gauge)}%</span></div>
+      ${lockLine}
+    `;
+  }
+
+  function renderAll() { renderPlayer(); renderEnemy(); }
+
+  function updateStatusDisplay() {
+    const el = document.getElementById('statusDisplay');
+    if (!state.battleStarted) { el.textContent = 'awaiting engagement'; return; }
+    if (state.gameOver) { el.textContent = ''; return; }
+    if (state.decisionPause) { el.textContent = 'your readiness is full — choose an action'; return; }
+    el.textContent = 'engagement in progress...';
+  }
+
+  function clearSubmenu() {
+    const sm = document.getElementById('submenu');
+    sm.classList.remove('visible');
+    sm.innerHTML = '';
+  }
+  function makeOption(labelHtml, metaText, enabled, onClick) {
+    const b = document.createElement('button');
+    b.innerHTML = labelHtml + (metaText ? `<div class="opt-meta">${metaText}</div>` : '');
+    b.disabled = !enabled;
+    if (enabled) b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function checkGameOver() {
+    if (state.enemy.connection <= 0) { endGame(true, 'ENEMY CONNECTION SEVERED — HACK SUCCESSFUL'); return true; }
+    if (state.player.connection <= 0) { endGame(false, 'YOUR CONNECTION SEVERED — HACK FAILED'); return true; }
+    return false;
+  }
+  function endGame(win, message) {
+    state.gameOver = true;
+    if (combatInterval) { clearInterval(combatInterval); combatInterval = null; }
+    const go = document.getElementById('gameover');
+    go.textContent = message;
+    go.className = 'gameover visible ' + (win ? 'win' : 'lose');
+    log(message, win ? 'good' : 'bad');
+    updateStatusDisplay();
+    document.getElementById('actionButtonsWrap').classList.add('hidden');
+    document.getElementById('combatResultBar').classList.remove('hidden');
+    if (onCombatResolved) onCombatResolved(win);
+  }
+
+  function openDecisionWindow() {
+    state.decisionPause = true;
+    log('readiness full — awaiting your command', 'warn');
+    updateStatusDisplay();
+    document.getElementById('actionButtonsWrap').classList.remove('hidden');
+  }
+  function closeDecisionWindow() {
+    state.decisionPause = false;
+    state.player.gauge = 0;
+    clearSubmenu();
+    document.getElementById('actionButtonsWrap').classList.add('hidden');
+    updateStatusDisplay();
+    renderAll();
+    checkGameOver();
+  }
+
+  document.getElementById('btnAttack').addEventListener('click', () => {
+    clearSubmenu();
+    const sm = document.getElementById('submenu');
+    const p = state.player, e = state.enemy;
+
+    if (e.firewall > 0) {
+      const bruteReady = p.cd.exploit === 0 && p.power >= ACTIONS.exploit.cost;
+      sm.appendChild(makeOption('brute force', `power ${ACTIONS.exploit.cost} · cooldown ${ACTIONS.exploit.cdSec}s · reliable firewall damage`, bruteReady, () => {
+        p.power -= ACTIONS.exploit.cost;
+        p.cd.exploit = ACTIONS.exploit.cdSec;
+        const dmg = Math.min(e.firewall, ACTIONS.exploit.dmgFirewall);
+        e.firewall -= dmg;
+        if (e.firewall <= 0) { log(`brute force lands — enemy firewall down ${dmg}, BREACHED`, 'good'); p.sustainedActive = false; }
+        else log(`brute force lands — enemy firewall down ${dmg} (${e.firewall} left)`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const zdReady = p.cd.zeroday === 0 && p.power >= ACTIONS.zeroday.cost;
+      sm.appendChild(makeOption('zero-day', `power ${ACTIONS.zeroday.cost} · cooldown ${ACTIONS.zeroday.cdSec}s · rare, massive firewall damage`, zdReady, () => {
+        p.power -= ACTIONS.zeroday.cost;
+        p.cd.zeroday = ACTIONS.zeroday.cdSec;
+        const dmg = Math.min(e.firewall, ACTIONS.zeroday.dmgFirewall);
+        e.firewall -= dmg;
+        if (e.firewall <= 0) { log(`zero-day lands — enemy firewall shattered, BREACHED`, 'good'); p.sustainedActive = false; }
+        else log(`zero-day lands — enemy firewall down ${dmg} (${e.firewall} left)`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const susReady = p.cd.sustained === 0 && p.power >= ACTIONS.sustained.cost;
+      sm.appendChild(makeOption(p.sustainedActive ? 'sustained (refresh)' : 'sustained', `power ${ACTIONS.sustained.cost} · cooldown ${ACTIONS.sustained.cdSec}s · ticks ${ACTIONS.sustained.tickDmg} dmg every ${ACTIONS.sustained.tickIntervalSec}s until breached`, susReady, () => {
+        p.power -= ACTIONS.sustained.cost;
+        p.cd.sustained = ACTIONS.sustained.cdSec;
+        p.sustainedActive = true;
+        p.sustainedTimer = ACTIONS.sustained.tickIntervalSec;
+        log('sustained exploit deployed — ticking against enemy firewall', 'good');
+        closeDecisionWindow();
+      }));
+    } else {
+      const wormReady = p.cd.worm === 0 && p.power >= ACTIONS.worm.cost;
+      sm.appendChild(makeOption('worm', `power ${ACTIONS.worm.cost} · cooldown ${ACTIONS.worm.cdSec}s · reliable connection damage`, wormReady, () => {
+        p.power -= ACTIONS.worm.cost;
+        p.cd.worm = ACTIONS.worm.cdSec;
+        const dmg = Math.min(e.connection, ACTIONS.worm.dmgConnection);
+        e.connection -= dmg;
+        log(`worm deployed — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const lbReady = p.cd.logicbomb === 0 && p.power >= ACTIONS.logicbomb.cost;
+      sm.appendChild(makeOption('logic bomb', `power ${ACTIONS.logicbomb.cost} · cooldown ${ACTIONS.logicbomb.cdSec}s · heavy connection damage`, lbReady, () => {
+        p.power -= ACTIONS.logicbomb.cost;
+        p.cd.logicbomb = ACTIONS.logicbomb.cdSec;
+        const dmg = Math.min(e.connection, ACTIONS.logicbomb.dmgConnection);
+        e.connection -= dmg;
+        log(`logic bomb detonates — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const trojanReady = p.cd.trojan === 0 && p.power >= ACTIONS.trojan.cost && !p.trojanPending;
+      sm.appendChild(makeOption('trojan', p.trojanPending ? 'already armed' : `power ${ACTIONS.trojan.cost} · cooldown ${ACTIONS.trojan.cdSec}s · plants a ${ACTIONS.trojan.fuseSec}s fuse for a massive hit — exposed (${ACTIONS.trojan.exposedMultiplier}x incoming dmg) until it detonates`, trojanReady, () => {
+        p.power -= ACTIONS.trojan.cost;
+        p.cd.trojan = ACTIONS.trojan.cdSec;
+        p.trojanPending = true;
+        p.trojanSecLeft = ACTIONS.trojan.fuseSec;
+        log(`trojan planted — detonates in ${ACTIONS.trojan.fuseSec}s, you are exposed until then`, 'warn');
+        closeDecisionWindow();
+      }));
+
+      const jamReady = p.cd.jam === 0 && p.power >= ACTIONS.jam.cost;
+      sm.appendChild(makeOption('jam', `power ${ACTIONS.jam.cost} · cooldown ${ACTIONS.jam.cdSec}s · knocks enemy readiness back ${ACTIONS.jam.gaugeSetback}%`, jamReady, () => {
+        p.power -= ACTIONS.jam.cost;
+        p.cd.jam = ACTIONS.jam.cdSec;
+        e.gauge = Math.max(0, e.gauge - ACTIONS.jam.gaugeSetback);
+        log(`jam successful — enemy readiness knocked back ${ACTIONS.jam.gaugeSetback}%`, 'good');
+        closeDecisionWindow();
+      }));
+
+      const disableReady = p.cd.disable === 0 && p.power >= ACTIONS.disable.cost;
+      sm.appendChild(makeOption('disable', `power ${ACTIONS.disable.cost} · cooldown ${ACTIONS.disable.cdSec}s · locks enemy worm for ${ACTIONS.disable.lockSec}s`, disableReady, () => {
+        p.power -= ACTIONS.disable.cost;
+        p.cd.disable = ACTIONS.disable.cdSec;
+        e.wormLockedSec = ACTIONS.disable.lockSec;
+        log(`disable deployed — enemy worm offline for ${ACTIONS.disable.lockSec}s`, 'good');
+        closeDecisionWindow();
+      }));
+    }
+
+    sm.classList.add('visible');
+  });
+
+  document.getElementById('btnDefense').addEventListener('click', () => {
+    clearSubmenu();
+    const sm = document.getElementById('submenu');
+    const p = state.player, e = state.enemy;
+
+    const decoyReady = p.cd.decoy === 0 && p.power >= ACTIONS.decoy.cost;
+    sm.appendChild(makeOption('decoy', `power ${ACTIONS.decoy.cost} · cooldown ${ACTIONS.decoy.cdSec}s · enemy wastes its next move, you get a free counter`, decoyReady, () => {
+      p.power -= ACTIONS.decoy.cost;
+      p.cd.decoy = ACTIONS.decoy.cdSec;
+      e.decoyWasteNext = true;
+      log('decoy planted — enemy will waste its next move', 'good');
+      closeDecisionWindow();
+    }));
+
+    const hardenReady = p.cd.harden === 0 && p.power >= ACTIONS.harden.cost;
+    sm.appendChild(makeOption('harden', `power ${ACTIONS.harden.cost} · cooldown ${ACTIONS.harden.cdSec}s · halves the damage of the next hit you take`, hardenReady, () => {
+      p.power -= ACTIONS.harden.cost;
+      p.cd.harden = ACTIONS.harden.cdSec;
+      p.hardenActive = true;
+      log('hardened — braced for the next hit', 'good');
+      closeDecisionWindow();
+    }));
+
+    const eccmReady = p.cd.eccm === 0 && p.power >= ACTIONS.eccm.cost;
+    sm.appendChild(makeOption('eccm', `power ${ACTIONS.eccm.cost} · cooldown ${ACTIONS.eccm.cdSec}s · resists enemy jam attempts for ${ACTIONS.eccm.durationSec}s`, eccmReady, () => {
+      p.power -= ACTIONS.eccm.cost;
+      p.cd.eccm = ACTIONS.eccm.cdSec;
+      p.eccmActive = true;
+      p.eccmSecLeft = ACTIONS.eccm.durationSec;
+      log(`eccm engaged — resisting jam attempts for ${ACTIONS.eccm.durationSec}s`, 'good');
+      closeDecisionWindow();
+    }));
+
+    const evictReady = p.cd.evict === 0 && p.power >= ACTIONS.evict.cost && p.trojanOnMe;
+    sm.appendChild(makeOption('evict', p.trojanOnMe ? `power ${ACTIONS.evict.cost} · cooldown ${ACTIONS.evict.cdSec}s · removes the enemy's planted trojan before it detonates` : 'no threat to evict right now', evictReady, () => {
+      p.power -= ACTIONS.evict.cost;
+      p.cd.evict = ACTIONS.evict.cdSec;
+      p.trojanOnMe = false;
+      p.trojanOnMeSecLeft = 0;
+      log('evicted the enemy trojan before it could detonate', 'good');
+      closeDecisionWindow();
+    }));
+
+    sm.appendChild(makeOption('quarantine', 'not yet available — waiting on units', false, () => {}));
+
+    sm.classList.add('visible');
+  });
+
+  document.getElementById('btnSkip').addEventListener('click', () => {
+    if (!state.decisionPause) return;
+    log('held position — readiness reset', 'warn');
+    closeDecisionWindow();
+  });
+
+  document.getElementById('btnDisconnect').addEventListener('click', () => {
+    if (state.gameOver) return;
+    endGame(false, 'OPERATOR DISCONNECTED — RETREATED');
+  });
+
+  function beginBattle() {
+    state.battleStarted = true;
+    state.player.gauge = GAUGE_MAX;
+    log('target engaged — readiness gauges now active', 'warn');
+    renderAll();
+    openDecisionWindow();
+  }
+
+  function resolveEnemyAction() {
+    const e = state.enemy, p = state.player;
+
+    if (e.decoyWasteNext) {
+      e.decoyWasteNext = false;
+      log('enemy fell for the decoy — move wasted', 'warn');
+      if (e.firewall <= 0) {
+        const dmg = Math.min(e.connection, ACTIONS.worm.dmgConnection);
+        e.connection -= dmg;
+        log(`quick counter lands — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+      }
+      return;
+    }
+
+    let acted = false;
+
+    if (p.firewall > 0) {
+      if (e.cd.exploit === 0 && e.power >= ACTIONS.enemyExploit.cost) {
+        e.power -= ACTIONS.enemyExploit.cost;
+        e.cd.exploit = ACTIONS.enemyExploit.cdSec;
+        let dmg = ACTIONS.enemyExploit.dmgFirewall;
+        if (p.hardenActive) { dmg = Math.round(dmg * 0.5); p.hardenActive = false; log('hardened — hit absorbed, damage halved', 'good'); }
+        dmg = Math.min(p.firewall, dmg);
+        p.firewall -= dmg;
+        if (p.firewall <= 0) log(`enemy exploit lands — your firewall down ${dmg}, BREACHED`, 'bad');
+        else log(`enemy exploit lands — your firewall down ${dmg} (${p.firewall} left)`, 'bad');
+        acted = true;
+      }
+    } else {
+      const candidates = [];
+      if (e.wormLockedSec === 0 && e.cd.worm === 0 && e.power >= ACTIONS.enemyWorm.cost) candidates.push('worm');
+      if (e.cd.jam === 0 && e.power >= ACTIONS.enemyJam.cost) candidates.push('jam');
+      if (e.cd.trojan === 0 && e.power >= ACTIONS.enemyTrojan.cost && !p.trojanOnMe) candidates.push('trojan');
+
+      if (candidates.length > 0) {
+        const choice = candidates[Math.floor(Math.random() * candidates.length)];
+        if (choice === 'worm') {
+          e.power -= ACTIONS.enemyWorm.cost;
+          e.cd.worm = ACTIONS.enemyWorm.cdSec;
+          let dmg = ACTIONS.enemyWorm.dmgConnection;
+          if (p.trojanPending) { dmg = Math.round(dmg * ACTIONS.trojan.exposedMultiplier); log('you are exposed — incoming damage amplified', 'warn'); }
+          if (p.hardenActive) { dmg = Math.round(dmg * 0.5); p.hardenActive = false; log('hardened — hit absorbed, damage halved', 'good'); }
+          dmg = Math.min(p.connection, dmg);
+          p.connection -= dmg;
+          log(`enemy worm lands — your connection down ${dmg} (${p.connection} left)`, 'bad');
+        } else if (choice === 'jam') {
+          e.power -= ACTIONS.enemyJam.cost;
+          e.cd.jam = ACTIONS.enemyJam.cdSec;
+          if (p.eccmActive) {
+            log('eccm resisted the enemy jam attempt', 'good');
+          } else {
+            p.gauge = Math.max(0, p.gauge - ACTIONS.enemyJam.gaugeSetback);
+            log(`enemy jam lands — your readiness knocked back ${ACTIONS.enemyJam.gaugeSetback}%`, 'bad');
+          }
+        } else if (choice === 'trojan') {
+          e.power -= ACTIONS.enemyTrojan.cost;
+          e.cd.trojan = ACTIONS.enemyTrojan.cdSec;
+          p.trojanOnMe = true;
+          p.trojanOnMeSecLeft = ACTIONS.enemyTrojan.fuseSec;
+          log(`enemy trojan planted on you — detonates in ${ACTIONS.enemyTrojan.fuseSec}s unless evicted`, 'bad');
+        }
+        acted = true;
+      }
+    }
+
+    if (!acted) log('enemy holds — insufficient resources or options', 'warn');
+  }
+
+  function combatTick() {
+    if (!state.battleStarted || state.gameOver) return;
+    const dt = TICK_MS / 1000;
+    const p = state.player, e = state.enemy;
+
+    if (!state.decisionPause) {
+      p.power = Math.min(p.powerMax, p.power + PLAYER_POWER_PER_SEC * dt);
+      e.power = Math.min(e.powerMax, e.power + ENEMY_POWER_PER_SEC * dt);
+
+      Object.keys(p.cd).forEach(k => { if (p.cd[k] > 0) p.cd[k] = Math.max(0, p.cd[k] - dt); });
+      Object.keys(e.cd).forEach(k => { if (e.cd[k] > 0) e.cd[k] = Math.max(0, e.cd[k] - dt); });
+      if (e.wormLockedSec > 0) e.wormLockedSec = Math.max(0, e.wormLockedSec - dt);
+
+      if (p.sustainedActive && e.firewall > 0) {
+        p.sustainedTimer -= dt;
+        if (p.sustainedTimer <= 0) {
+          const dmg = Math.min(e.firewall, ACTIONS.sustained.tickDmg);
+          e.firewall -= dmg;
+          p.sustainedTimer = ACTIONS.sustained.tickIntervalSec;
+          if (e.firewall <= 0) { log(`sustained exploit ticks — enemy firewall down ${dmg}, BREACHED`, 'good'); p.sustainedActive = false; }
+          else log(`sustained exploit ticks — enemy firewall down ${dmg} (${e.firewall} left)`, 'good');
+        }
+      }
+
+      if (p.trojanPending) {
+        p.trojanSecLeft -= dt;
+        if (p.trojanSecLeft <= 0) {
+          p.trojanPending = false;
+          const dmg = Math.min(e.connection, ACTIONS.trojan.detonateDmg);
+          e.connection -= dmg;
+          log(`trojan detonates — enemy connection down ${dmg} (${e.connection} left)`, 'good');
+        }
+      }
+
+      if (p.trojanOnMe) {
+        p.trojanOnMeSecLeft -= dt;
+        if (p.trojanOnMeSecLeft <= 0) {
+          p.trojanOnMe = false;
+          const dmg = Math.min(p.connection, ACTIONS.enemyTrojan.detonateDmg);
+          p.connection -= dmg;
+          log(`enemy trojan detonates — your connection down ${dmg} (${p.connection} left)`, 'bad');
+        }
+      }
+
+      if (p.eccmActive) {
+        p.eccmSecLeft -= dt;
+        if (p.eccmSecLeft <= 0) {
+          p.eccmActive = false;
+          log('eccm window expired', 'warn');
+        }
+      }
+
+      p.gauge = Math.min(GAUGE_MAX, p.gauge + PLAYER_FILL_PER_SEC * dt);
+      e.gauge = Math.min(GAUGE_MAX, e.gauge + ENEMY_FILL_PER_SEC * dt);
+
+      if (p.gauge >= GAUGE_MAX) {
+        openDecisionWindow();
+      } else if (e.gauge >= GAUGE_MAX) {
+        resolveEnemyAction();
+        e.gauge = 0;
+      }
+    }
+
+    renderAll();
+    checkGameOver();
+  }
+
+  // =========================================================
+  // LAUNCH / TEARDOWN
+  // =========================================================
+  function launchCombat(sectorIdx, coordIdx) {
+    const coord = sectors[sectorIdx].coords[coordIdx];
+
+    state = freshCombatState();
+    logEl.innerHTML = '';
+    document.getElementById('gameover').className = 'gameover';
+    document.getElementById('combatResultBar').classList.add('hidden');
+    document.getElementById('actionButtonsWrap').classList.add('hidden');
+    clearSubmenu();
+
+    log('interface online — exploit the firewall, then deploy payload', 'warn');
+    log('connection established — enemy firewall intact');
+    renderAll();
+
+    if (combatInterval) clearInterval(combatInterval);
+    combatInterval = setInterval(combatTick, TICK_MS);
+
+    onCombatResolved = (won) => {
+      if (won) coord.defeated = true;
+      // on loss, the coordinate just stays hostile/undefeated — retry later
+    };
+
+    showScreen('screenCombat');
+    beginBattle();
+  }
+
+  // =========================================================
+  // INIT
+  // =========================================================
+  renderSectorSelect();
+  showScreen('screenIntro');
+</script>
+
+</body>
+</html>
